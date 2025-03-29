@@ -49,3 +49,19 @@ mkfs.ext4 -L home /dev/system/home
 
 # Create swap space
 mkswap -L swap /dev/system/swap
+
+# BTRFS SUBVOLUMES
+
+# Create separate BTRFS subvolumes that do not snapshot
+mkdir /mnt/btrfsroot
+mount /dev/syatem/root /mnt/btrfsroot
+btrfs subvolume create /mnt/btrfsroot/@
+# Below not yet validated. Need more information.
+btrfs subvolume create /mnt/btrfsroot/@/var
+btrfs subvolume create /mnt/btrfsroot/@/usr/local
+btrfs subvolume create /mnt/btrfsroot/@/srv
+btrfs subvolume create /mnt/btrfsroot/@/root
+btrfs subvolume create /mnt/btrfsroot/@/opt
+btrfs subvolume create /mnt/btrfsroot/@/boot/grub2/x86_64-efi
+btrfs subvolume create /mnt/btrfsroot/@/boot/grub2/i386-pc
+btrfs subvolume create /mnt/btrfsroot/@/.snapshots
