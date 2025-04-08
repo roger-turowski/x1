@@ -1,6 +1,5 @@
 #!/bin/bash
-echo "Hello world!"
-
+echo Hello world!
 # Start here...
 
 
@@ -13,7 +12,7 @@ sgdisk --zap-all --clear /dev/sda
 # PHYSICAL PARTITIONS
 
 # Create the physical EFI partition
-sgdisk --new=1:0:+1G --typecode=1:ef00 --change-name=1:EFI /dev/sda
+sgdisk --new=1:0:+4G --typecode=1:ef00 --change-name=1:EFI /dev/sda
 
 # Create the physical partition for root, swap and home
 ### pvcreate /dev/sda (not working)
@@ -32,7 +31,7 @@ vgcreate system /dev/sda2
 # LOGICAL VOLUMES 
 
 # Create the logical volumes for root, swap and home
-lvcreate -l 20%FREE -n root system
+lvcreate -L 20%FREE -n root system
 lvcreate -L 2G -n swap system
 lvcreate -L 100%FREE -n home system
 
@@ -54,7 +53,7 @@ mkswap -L swap /dev/system/swap
 
 # Create separate BTRFS subvolumes that do not snapshot
 mkdir /mnt/btrfsroot
-mount /dev/syatem/root /mnt/btrfsroot
+mount /dev/system/root /mnt/btrfsroot
 btrfs subvolume create /mnt/btrfsroot/@
 # Below not yet validated. Need more information.
 btrfs subvolume create /mnt/btrfsroot/@/var
