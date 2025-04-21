@@ -54,8 +54,8 @@ mkswap -L swap /dev/system/swap
 # Create separate BTRFS subvolumes that do not snapshot
 mkdir /mnt/btrfsroot
 mount /dev/system/root /mnt/btrfsroot
+mkdir -p /mnt/btrfsroot/@/{usr,boot/grub2}
 btrfs subvolume create /mnt/btrfsroot/@
-# Below not yet validated. Need more information.
 btrfs subvolume create /mnt/btrfsroot/@/var
 btrfs subvolume create /mnt/btrfsroot/@/usr/local
 btrfs subvolume create /mnt/btrfsroot/@/srv
