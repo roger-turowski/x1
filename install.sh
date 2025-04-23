@@ -21,11 +21,11 @@ timedatectl set-ntp true
 timedatectl status
 
 # Set-up the fastest Arch mirrors
-pacman -Sy reflector
+pacman --noconfirm -Sy reflector
 reflector -c us -p https --age 24 --number 5 --latest 150 --sort rate --verbose --save /etc/pacman.d/mirrorlist
 
 # Install useful tools for setup
-pacman -Sy fastfetch git
+pacman --noconfirm -S fastfetch git tree bat tldr
 
 # Clear the disk
 sgdisk --zap-all --clear /dev/sda
