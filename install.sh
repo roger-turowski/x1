@@ -68,11 +68,12 @@ mkfs.ext4 -L home /dev/system/home
 
 # Create swap space
 mkswap -L swap /dev/system/swap
-swapon
+swapon /dev/system/swap
 
 # BTRFS SUBVOLUMES
 # Notes:
-# Format, then mount, create subvolumes, unmount, create subvolume directories (Correct?)
+# Format, then mount, create subvolumes, unmount, create subvolume
+# directories, create subvolumes, unmount, re-mount with options (Correct?)
 
 # Create separate BTRFS subvolumes that do not snapshot
 
@@ -126,3 +127,84 @@ mount /dev/mapper/system-root /mnt/var -o subvol=@/var,$MOUNTOPTS
 
 # Options no longer needed
 MOUNTOPTS=
+
+# Mount the EFI partition
+mkdir -p /mnt/boot/efi
+mount /dev/sda1 /mnt/boot/efi
+
+# Mount the home partition
+mkdir -p /mnt/home
+mount /dev/mapper/system-home /mnt/home
+
+# Install base packages
+pacstrap /mnt base linux linux-firmware git vim intel-ucode btrfs-progs
+
+# Generate the File System TABle (fstab) using UUID numbers
+genfstab -U /mnt >> /mnt/etc/fstab
+
+# Proceed with the installation
+arch-chroot /mnt
+
+# Set-up the Time Zone
+ln -sf /usr/share/zoneinfo/America/Detroit /etc/localtime
+
+# Sync the Sytem Clock to the Hardware Clock
+hwclock --systohc
+
+# Generate the locale
+sed -i '171s/.//' /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" >> /etc/locale.conf
+
+# Configure keyboard mapping (Copied from OpenSUSE Tumbleweed)
+echo "KEYMAP=us" >> /etc/vconsole.conf
+echo "FONT=eurlatgr.psfu" >> /etc/vconsole.conf
+echo "FONT_MAP=" >> /etc/vconsole.conf
+echo "FONT_UNIMAP=" >> /etc/vconsole.conf
+echo "XKBLAYOUT=us" >> /etc/vconsole.conf
+echo "XKBMODEL=pc105+inet" >> /etc/vconsole.conf
+echo "XKBOPTIONS=terminate:ctrl_alt_bksp" >> /etc/vconsole.conf
+
+# Configure the Host Name
+echo "arch" >> /etc/hostname
+echo "127.0.0.1 localhost" >> /etc/hosts
+echo "::1       localhost" >> /etc/hosts
+echo "127.0.1.1 arch.localdomain arch" >> /etc/hosts
+
+# Set a password for root
+echo root:change-me | chpasswd
+
+# Install the rest of the system packages
+pacman -S --noconfirm grub efibootmgr networkmanager network-manager-applet dialog wpa_supplicant mtools dosfstools reflector base-devel linux-headers avahi xdg-user-dirs xdg-utils gvfs gvfs-smb nfs-utils inetutils dnsutils bluez bluez-utils cups alsa-utils pulseaudio bash-completion openssh rsync reflector acpi acpi_call tlp edk2-ovmf bridge-utils dnsmasq vde2 openbsd-netcat ipset firewalld flatpak sof-firmware nss-mdns acpid os-prober ntfs-3g terminus-font 
+
+# Uncomment below to install graphics card drivers
+# pacman -S --noconfirm xf86-video-amdgpu
+# pacman -S --noconfirm nvidia nvidia-utils nvidia-settings
+
+# Install GRUB
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+grub-mkconfig -o /boot/grub/grub.cfg
+
+# Enable Services
+systemctl enable NetworkManager
+systemctl enable bluetooth
+systemctl enable cups.service
+systemctl enable sshd
+systemctl enable avahi-daemon
+systemctl enable tlp
+systemctl enable reflector.timer
+systemctl enable fstrim.timer
+systemctl enable libvirtd
+systemctl enable firewalld
+systemctl enable acpid
+
+# Add a user account
+useradd -m roger
+
+# Update mkinitcpio.conf
+vim /etc/mkinitcpio.conf
+# MODULES=(btrfs)
+# HOOKS=(... block lvm2 filesystems ...)
+mkinitcpio -p linux
+
+# RESULT: Not booting. "No compatible bootloader found."
