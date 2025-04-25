@@ -175,7 +175,7 @@ echo "127.0.1.1 arch.localdomain arch" >> /etc/hosts
 echo root:change-me | chpasswd
 
 # Install the rest of the system packages
-pacman -S --noconfirm grub efibootmgr networkmanager network-manager-applet dialog wpa_supplicant mtools dosfstools reflector base-devel linux-headers avahi xdg-user-dirs xdg-utils gvfs gvfs-smb nfs-utils inetutils dnsutils bluez bluez-utils cups alsa-utils pulseaudio bash-completion openssh rsync reflector acpi acpi_call tlp edk2-ovmf bridge-utils dnsmasq vde2 openbsd-netcat ipset firewalld flatpak sof-firmware nss-mdns acpid os-prober ntfs-3g terminus-font 
+pacman -S --noconfirm lvm2 grub efibootmgr networkmanager network-manager-applet dialog wpa_supplicant mtools dosfstools reflector base-devel linux-headers avahi xdg-user-dirs xdg-utils gvfs gvfs-smb nfs-utils inetutils dnsutils bluez bluez-utils cups alsa-utils pulseaudio bash-completion openssh rsync reflector acpi acpi_call tlp edk2-ovmf bridge-utils dnsmasq vde2 openbsd-netcat ipset firewalld flatpak sof-firmware nss-mdns acpid os-prober ntfs-3g terminus-font 
 
 # Uncomment below to install graphics card drivers
 # pacman -S --noconfirm xf86-video-amdgpu
@@ -198,8 +198,9 @@ systemctl enable libvirtd
 systemctl enable firewalld
 systemctl enable acpid
 
-# Add a user account
-useradd -m roger
+# Make wheel group sudo enabled
+# EDITOR=vim visudo
+# Uncomment %wheel ALL=(ALL:ALL) ALL
 
 # Update mkinitcpio.conf
 vim /etc/mkinitcpio.conf
@@ -207,4 +208,24 @@ vim /etc/mkinitcpio.conf
 # HOOKS=(... block lvm2 filesystems ...)
 mkinitcpio -p linux
 
-# RESULT: Not booting. "No compatible bootloader found."
+# Add a user account
+useradd -mG wheel roger
+
+# Finish and reboot
+exit
+umount -a
+reboot
+
+# Install KDE Plasma
+sudo pacman -S --needed xorg sddm
+sudo pacman -S --needed plasma kde-applications pipewire-media-session phonon-qt5-gstreamer pyside2 cronie tesseract-data-eng plasma-wayland-session
+
+sudo systemctl enable sddm
+sudo systemctl enable NetworkManager
+
+sudo vim /usr/lib/sddm/sddm.conf.d/default.conf
+[Theme]
+# current theme name
+ Current=breeze
+
+ sudo systemctl reboot
