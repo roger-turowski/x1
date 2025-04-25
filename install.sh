@@ -25,7 +25,7 @@ pacman --noconfirm -Sy reflector
 reflector -c us -p https --age 24 --number 5 --latest 150 --sort rate --verbose --save /etc/pacman.d/mirrorlist
 
 # Install useful tools for setup
-pacman --noconfirm -S fastfetch git tree bat tldr
+pacman --noconfirm -S fastfetch git tree bat tldr tmux vim
 
 # Clear the disk
 sgdisk --zap-all --clear /dev/sda
@@ -158,7 +158,7 @@ echo "LANG=en_US.UTF-8" >> /etc/locale.conf
 
 # Configure keyboard mapping (Copied from OpenSUSE Tumbleweed)
 echo "KEYMAP=us" >> /etc/vconsole.conf
-echo "FONT=eurlatgr.psfu" >> /etc/vconsole.conf
+echo "FONT=eurlatgr" >> /etc/vconsole.conf
 echo "FONT_MAP=" >> /etc/vconsole.conf
 echo "FONT_UNIMAP=" >> /etc/vconsole.conf
 echo "XKBLAYOUT=us" >> /etc/vconsole.conf
@@ -194,7 +194,6 @@ systemctl enable avahi-daemon
 systemctl enable tlp
 systemctl enable reflector.timer
 systemctl enable fstrim.timer
-systemctl enable libvirtd
 systemctl enable firewalld
 systemctl enable acpid
 
@@ -210,22 +209,21 @@ mkinitcpio -p linux
 
 # Add a user account
 useradd -mG wheel roger
+echo roger:change-me | chpasswd
 
 # Finish and reboot
 exit
 umount -a
-reboot
+systemctl reboot
 
 # Install KDE Plasma
 sudo pacman -S --needed xorg sddm
-sudo pacman -S --needed plasma kde-applications pipewire-media-session phonon-qt5-gstreamer pyside2 cronie tesseract-data-eng plasma-wayland-session
+sudo pacman -S --needed plasma kde-applications
 
 sudo systemctl enable sddm
 sudo systemctl enable NetworkManager
 
-sudo vim /usr/lib/sddm/sddm.conf.d/default.conf
-[Theme]
-# current theme name
- Current=breeze
+# Apply the Breeze theme to sddm
+sudo mkdir /etc/sddm.conf.d/ && sudo sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
- sudo systemctl reboot
+sudo systemctl reboot
