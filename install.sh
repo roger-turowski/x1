@@ -202,28 +202,58 @@ systemctl enable acpid
 # Uncomment %wheel ALL=(ALL:ALL) ALL
 
 # Update mkinitcpio.conf
-vim /etc/mkinitcpio.conf
+# vim /etc/mkinitcpio.conf
 # MODULES=(btrfs)
 # HOOKS=(... block lvm2 filesystems ...)
+sed -i 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf
+sed -i 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs' /etc/mkinitcpio.conf
 mkinitcpio -p linux
 
 # Add a user account
 useradd -mG wheel roger
 echo roger:change-me | chpasswd
 
+# Install KDE Plasma and sddm
+pacman -S --needed --noconfirm xorg sddm
+pacman -S --needed --noconfirm plasma kde-applications
+systemctl enable sddm
+
+# Apply the Breeze theme to sddm
+mkdir /etc/sddm.conf.d/ && sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
+
+# Add some useful applications
+pacman -S tree wireshark-qt ttf-0xproto-nerd ttf-cascadia-code-nerd ttf-cascadia-mono-nerd ttf-firacode-nerd ttf-hack-nerd ttf-jetbrains-mono-nerd ttf-sourcecodepro-nerd curl plocate btop htop fastfetch tmux tldr zellij git eza bat xrdp mc vifm
+
+# Finish configuring snapper
+pacman -S snapper snap-pac grub-btrfs inotify-tools
+btrfs subvolume delete /.snapshots/
+snapper -c root create-config /
+snapper list-configs
+snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes
+sed -i 's/PRUNENAMES = ".git .hg .svn"/PRUNENAMES = ".git .hg .svn .snapshots"/' /etc/updatedb.conf
+
+# Configure GRUB for snapshot recovery
+sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
+grub-mkconfig -o /boot/grub/grub.cfg
+systemctl enable grub-btrfsd
+systemctl enable snapper-boot.timer
+
+# /etc/updatedb.conf
+# PRUNENAMES = ".snapshots"
+
 # Finish and reboot
 exit
 umount -a
 systemctl reboot
 
-# Install KDE Plasma
-sudo pacman -S --needed xorg sddm
-sudo pacman -S --needed plasma kde-applications
 
-sudo systemctl enable sddm
-sudo systemctl enable NetworkManager
 
-# Apply the Breeze theme to sddm
-sudo mkdir /etc/sddm.conf.d/ && sudo sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
+# Log on as a regular user
 
-sudo systemctl reboot
+# Install an AUR helper
+sudo pacman -S --needed base-devel git
+git clone https://aur.archlinux.org/yay.git
+pushd yay
+makepkg -si
+popd
+yay -S brave-bin btrfs-assistant ttf-ms-fonts
