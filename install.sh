@@ -51,7 +51,7 @@ vgcreate system /dev/sda2
 # LOGICAL VOLUMES 
 
 # Create the logical volumes for root, swap and home
-lvcreate -l 20%FREE -n root system
+lvcreate -l 30%FREE -n root system
 lvcreate -L 2G -n swap system
 lvcreate -l 100%FREE -n home system
 
@@ -113,7 +113,6 @@ umount /mnt
 
 # Options used for all mounts utilizing an SSD
 MOUNTOPTS=noatime,ssd,space_cache=v2,compress=zstd,discard=async
-
 mount /dev/mapper/system-root /mnt -o subvol=@,$MOUNTOPTS
 mount /dev/mapper/system-root /mnt/.snapshots -o subvol=@/.snapshots,$MOUNTOPTS
 mount /dev/mapper/system-root /mnt/boot/grub2/i386-pc -o subvol=@/boot/grub2/i386-pc,$MOUNTOPTS
@@ -124,8 +123,6 @@ mount /dev/mapper/system-root /mnt/srv -o subvol=@/srv,$MOUNTOPTS
 mount /dev/mapper/system-root /mnt/tmp -o subvol=@/tmp,$MOUNTOPTS
 mount /dev/mapper/system-root /mnt/usr/local -o subvol=@/usr/local,$MOUNTOPTS
 mount /dev/mapper/system-root /mnt/var -o subvol=@/var,$MOUNTOPTS
-
-# Options no longer needed
 MOUNTOPTS=
 
 # Mount the EFI partition
@@ -157,19 +154,21 @@ locale-gen
 echo "LANG=en_US.UTF-8" >> /etc/locale.conf
 
 # Configure keyboard mapping (Copied from OpenSUSE Tumbleweed)
-echo "KEYMAP=us" >> /etc/vconsole.conf
-echo "FONT=eurlatgr" >> /etc/vconsole.conf
-echo "FONT_MAP=" >> /etc/vconsole.conf
-echo "FONT_UNIMAP=" >> /etc/vconsole.conf
-echo "XKBLAYOUT=us" >> /etc/vconsole.conf
-echo "XKBMODEL=pc105+inet" >> /etc/vconsole.conf
-echo "XKBOPTIONS=terminate:ctrl_alt_bksp" >> /etc/vconsole.conf
+{ echo "KEYMAP=us";
+  echo "FONT=eurlatgr";
+  echo "FONT_MAP=";
+  echo "FONT_UNIMAP=";
+  echo "XKBLAYOUT=us";
+  echo "XKBMODEL=pc105+inet";
+  echo "XKBOPTIONS=terminate:ctrl_alt_bksp";
+ } >> /etc/vconsole.conf
 
 # Configure the Host Name
-echo "arch" >> /etc/hostname
-echo "127.0.0.1 localhost" >> /etc/hosts
-echo "::1       localhost" >> /etc/hosts
-echo "127.0.1.1 arch.localdomain arch" >> /etc/hosts
+{ echo -e "arch" >> /etc/hostname;
+  echo -e "127.0.0.1\tlocalhost";
+  echo -e "::1\t\tlocalhost";
+  echo -e "127.0.1.1\tarch.localdomain\tarch"
+} >> /etc/hosts
 
 # Set a password for root
 echo root:change-me | chpasswd
@@ -200,6 +199,13 @@ systemctl enable acpid
 # Make wheel group sudo enabled
 # EDITOR=vim visudo
 # Uncomment %wheel ALL=(ALL:ALL) ALL
+# The code to update sudoers file below needs to be verified!
+SUDOER_TMP=$(mktemp)
+cat /etc/sudoers > $SUDOER_TMP
+sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' $SUDOER_TMP
+visudo -c -f $SUDOER_TMP && \ # this will fail if the syntax is incorrect
+    cat $SUDOER_TMP > /etc/sudoers
+rm $SUDOER_TMP
 
 # Update mkinitcpio.conf
 # vim /etc/mkinitcpio.conf
@@ -222,7 +228,7 @@ systemctl enable sddm
 mkdir /etc/sddm.conf.d/ && sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
 # Add some useful applications
-pacman -S tree wireshark-qt ttf-0xproto-nerd ttf-cascadia-code-nerd ttf-cascadia-mono-nerd ttf-firacode-nerd ttf-hack-nerd ttf-jetbrains-mono-nerd ttf-sourcecodepro-nerd curl plocate btop htop fastfetch tmux tldr zellij git eza bat xrdp mc vifm
+pacman -S tree wireshark-qt ttf-0xproto-nerd ttf-cascadia-code-nerd ttf-cascadia-mono-nerd ttf-firacode-nerd ttf-hack-nerd ttf-jetbrains-mono-nerd ttf-sourcecodepro-nerd curl plocate btop htop fastfetch tmux tldr zellij git eza bat xrdp mc vifm tldr fzf
 
 # Finish configuring snapper
 pacman -S snapper snap-pac grub-btrfs inotify-tools
