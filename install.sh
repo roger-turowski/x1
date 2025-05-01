@@ -2,6 +2,19 @@
 
 # See https://github.com/walian0/bashscripts/blob/main/arch_plasma_auto.bash
 
+success_color="\e[1;32m"
+error_color="\e[1;31m"
+no_color="\e[0m"
+
+error_result() {
+	echo -e "[  ${error_color}ERROR${no_color} ] $1"
+	exit 1
+}
+
+ok_result() {
+	echo -e "[   ${success_color}OK${no_color}   ] $1"
+}
+
 # Initialize variables
 my_timezone=US/Michigan
 
@@ -102,15 +115,16 @@ localectl set-keymap us
 timedatectl set-timezone $my_timezone
 
 # Configure ntp
-timedatectl set-ntp true
-timedatectl status
+timedatectl set-ntp true \
+    && timedatectl status \
+    || error_result "Could not set-ntp"
 
 # Set-up the fastest Arch mirrors
 pacman --noconfirm -Sy reflector
 reflector -c us -p https --age 24 --number 5 --latest 150 --sort rate --verbose --save /etc/pacman.d/mirrorlist
 
-# Install useful tools for setup
-pacman --noconfirm -S fastfetch git tree bat tldr tmux vim
+# Install tools useful during setup
+pacman --noconfirm -S fastfetch git tree bat tldr tmux vim nano
 
 # Clear the disk
 sgdisk --zap-all --clear /dev/sda
