@@ -1,5 +1,90 @@
 #!/bin/bash
 
+# See https://github.com/walian0/bashscripts/blob/main/arch_plasma_auto.bash
+
+# Initialize variables
+my_timezone=US/Michigan
+
+# Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
+pacstrap_pkgs=(
+    base
+    btrfs-progs
+    cryptsetup
+    dosfstools
+    e2fsprogs
+    git
+    linux
+    linux-firmware
+    nano
+    networkmanager
+    sudo
+    util-linux
+    vi
+    vim
+)
+
+# Detect the CPU type to install appropriate firmware
+cat /proc/cpuinfo | grep -m 1 "GenuineIntel" && cpu_firmare="intel-ucode" || cpu_firmware="amd-ucode"
+
+# Add the correct CPU firmware to the pacstrap_pkgs array
+pacstrap_pkgs+=("$cpu_firmware")
+
+gui_pkgs=(
+    acpi
+    acpi_call
+    acpid
+    alsa-utils
+    avahi
+    base-devel
+    bash-completion
+    bat
+    bluez
+    bluez-utils
+    bridge-utils
+    cups
+    dialog
+    dnsmasq
+    dnsutils
+    dosfstools
+    edk2-ovmf
+    efibootmgr
+    eza
+    fastfetch
+    firewalld
+    flatpak
+    fzf
+    grub
+    gvfs
+    gvfs-smb
+    inetutils
+    ipset
+    linux-headers
+    lvm2
+    mc
+    mtools
+    network-manager-applet
+    networkmanager
+    nfs-utils
+    nss-mdns
+    ntfs-3g
+    openbsd-netcat
+    openssh
+    os-prober
+    pulseaudio
+    reflector
+    rsync
+    sof-firmware
+    terminus-font 
+    tlp
+    tmux
+    tree
+    vde2
+    vifm
+    wpa_supplicant
+    xdg-user-dirs
+    xdg-utils
+)
+
 # Configure keyboard
 localectl set-keymap us
 
@@ -14,7 +99,7 @@ localectl set-keymap us
 # passwd
 
 # Set the time zone
-timedatectl set-timezone US/Michigan
+timedatectl set-timezone $my_timezone
 
 # Configure ntp
 timedatectl set-ntp true
@@ -133,11 +218,13 @@ mount /dev/sda1 /mnt/boot/efi
 mkdir -p /mnt/home
 mount /dev/mapper/system-home /mnt/home
 
-# Install base packages
-pacstrap /mnt base linux linux-firmware git vim intel-ucode btrfs-progs
+# Install base packages. "-K" tells pacstrap to generate a new pacman master key
+pacstrap -K /mnt "${pacstrap_pkgs[@]}"
 
 # Generate the File System TABle (fstab) using UUID numbers
 genfstab -U /mnt >> /mnt/etc/fstab
+
+# * * * Arch Chroot * * *
 
 # Proceed with the installation
 arch-chroot /mnt
@@ -174,7 +261,7 @@ echo "LANG=en_US.UTF-8" >> /etc/locale.conf
 echo root:change-me | chpasswd
 
 # Install the rest of the system packages
-pacman -S --noconfirm lvm2 grub efibootmgr networkmanager network-manager-applet dialog wpa_supplicant mtools dosfstools reflector base-devel linux-headers avahi xdg-user-dirs xdg-utils gvfs gvfs-smb nfs-utils inetutils dnsutils bluez bluez-utils cups alsa-utils pulseaudio bash-completion openssh rsync reflector acpi acpi_call tlp edk2-ovmf bridge-utils dnsmasq vde2 openbsd-netcat ipset firewalld flatpak sof-firmware nss-mdns acpid os-prober ntfs-3g terminus-font 
+pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
 
 # Uncomment below to install graphics card drivers
 # pacman -S --noconfirm xf86-video-amdgpu
@@ -184,6 +271,7 @@ pacman -S --noconfirm lvm2 grub efibootmgr networkmanager network-manager-applet
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 grub-mkconfig -o /boot/grub/grub.cfg
 
+# ToDo: Optimize this section
 # Enable Services
 systemctl enable NetworkManager
 systemctl enable bluetooth
@@ -211,14 +299,17 @@ rm $SUDOER_TMP
 # vim /etc/mkinitcpio.conf
 # MODULES=(btrfs)
 # HOOKS=(... block lvm2 filesystems ...)
-sed -i 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf
-sed -i 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs' /etc/mkinitcpio.conf
+sed -i \
+    -e 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf \
+    -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs' \
+    /etc/mkinitcpio.conf
 mkinitcpio -p linux
 
 # Add a user account
 useradd -mG wheel roger
 echo roger:change-me | chpasswd
 
+# ToDo: Clean tis section up
 # Install KDE Plasma and sddm
 pacman -S --needed --noconfirm xorg sddm
 pacman -S --needed --noconfirm plasma kde-applications
