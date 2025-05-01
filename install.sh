@@ -7,16 +7,17 @@ error_color="\e[1;31m"
 no_color="\e[0m"
 
 error_result() {
-	echo -e "[  ${error_color}ERROR${no_color} ] $1"
+	echo -e "[  ${error_color}ERR{no_color} ] $1"
 	exit 1
 }
 
 ok_result() {
-	echo -e "[   ${success_color}OK${no_color}   ] $1"
+	echo -e "[  ${success_color}OK${no_color} ] $1"
 }
 
 # Initialize variables
 my_timezone=US/Michigan
+my_root_mount="/mnt"
 
 # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
 pacstrap_pkgs=(
@@ -32,12 +33,11 @@ pacstrap_pkgs=(
     networkmanager
     sudo
     util-linux
-    vi
     vim
 )
 
 # Detect the CPU type to install appropriate firmware
-cat /proc/cpuinfo | grep -m 1 "GenuineIntel" && cpu_firmare="intel-ucode" || cpu_firmware="amd-ucode"
+cat /proc/cpuinfo | grep -m 1 "GenuineIntel" && cpu_firmware="intel-ucode" || cpu_firmware="amd-ucode"
 
 # Add the correct CPU firmware to the pacstrap_pkgs array
 pacstrap_pkgs+=("$cpu_firmware")
@@ -112,19 +112,21 @@ localectl set-keymap us
 # passwd
 
 # Set the time zone
-timedatectl set-timezone $my_timezone
+timedatectl set-timezone $my_timezone \
+  && ok_result " Time Zone set" \
+  || error_result "Could not set the time zone"
 
 # Configure ntp
 timedatectl set-ntp true \
-    && timedatectl status \
-    || error_result "Could not set-ntp"
+  && timedatectl status \
+  || error_result "Could not set-ntp"
 
 # Set-up the fastest Arch mirrors
-pacman --noconfirm -Sy reflector
-reflector -c us -p https --age 24 --number 5 --latest 150 --sort rate --verbose --save /etc/pacman.d/mirrorlist
+# pacman --noconfirm -Sy reflector
+reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --save /etc/pacman.d/mirrorlist
 
 # Install tools useful during setup
-pacman --noconfirm -S fastfetch git tree bat tldr tmux vim nano
+pacman --noconfirm -S fastfetch git tree bat tldr tmux nano
 
 # Clear the disk
 sgdisk --zap-all --clear /dev/sda
@@ -176,72 +178,76 @@ swapon /dev/system/swap
 
 # Create separate BTRFS subvolumes that do not snapshot
 
-mount /dev/mapper/system-root /mnt
+mount /dev/mapper/system-root $my_root_mount
 
-btrfs subvolume create /mnt/@
+btrfs subvolume create $my_root_mount/@
 
-mkdir /mnt/.snapshots
-btrfs subvolume create /mnt/@/.snapshots
+mkdir $my_root_mount/.snapshots
+btrfs subvolume create $my_root_mount/@/.snapshots
 
-mkdir -p /mnt/boot/grub2/i386-pc
-btrfs subvolume create -p /mnt/@/boot/grub2/i386-pc
+mkdir -p $my_root_mount/boot/grub2/i386-pc
+btrfs subvolume create -p $my_root_mount/@/boot/grub2/i386-pc
 
-mkdir -p /mnt/boot/grub2/x86_64-efi
-btrfs subvolume create -p /mnt/@/boot/grub2/x86_64-efi
+mkdir -p $my_root_mount/boot/grub2/x86_64-efi
+btrfs subvolume create -p $my_root_mount/@/boot/grub2/x86_64-efi
 
-mkdir /mnt/opt
-btrfs subvolume create /mnt/@/opt
+mkdir $my_root_mount/opt
+btrfs subvolume create $my_root_mount/@/opt
 
-mkdir /mnt/root
-btrfs subvolume create /mnt/@/root
+mkdir $my_root_mount/root
+btrfs subvolume create $my_root_mount/@/root
 
-mkdir /mnt/srv
-btrfs subvolume create /mnt/@/srv
+mkdir $my_root_mount/srv
+btrfs subvolume create $my_root_mount/@/srv
 
-mkdir /mnt/tmp
-btrfs subvolume create /mnt/@/tmp
+mkdir $my_root_mount/tmp
+btrfs subvolume create $my_root_mount/@/tmp
 
-mkdir -p /mnt/usr/local
-btrfs subvolume create -p /mnt/@/usr/local
+mkdir -p $my_root_mount/usr/local
+btrfs subvolume create -p $my_root_mount/@/usr/local
 
-mkdir /mnt/var
-btrfs subvolume create /mnt/@/var
-chattr +C /mnt/@/var
+mkdir $my_root_mount/var
+btrfs subvolume create $my_root_mount/@/var
+chattr +C $my_root_mount/@/var
 
-umount /mnt
+umount $my_root_mount
 
 # Options used for all mounts utilizing an SSD
 MOUNTOPTS=noatime,ssd,space_cache=v2,compress=zstd,discard=async
-mount /dev/mapper/system-root /mnt -o subvol=@,$MOUNTOPTS
-mount /dev/mapper/system-root /mnt/.snapshots -o subvol=@/.snapshots,$MOUNTOPTS
-mount /dev/mapper/system-root /mnt/boot/grub2/i386-pc -o subvol=@/boot/grub2/i386-pc,$MOUNTOPTS
-mount /dev/mapper/system-root /mnt/boot/grub2/x86_64-efi -o subvol=@/boot/grub2/x86_64-efi,$MOUNTOPTS
-mount /dev/mapper/system-root /mnt/opt -o subvol=@/opt,$MOUNTOPTS
-mount /dev/mapper/system-root /mnt/root -o subvol=@/root,$MOUNTOPTS
-mount /dev/mapper/system-root /mnt/srv -o subvol=@/srv,$MOUNTOPTS
-mount /dev/mapper/system-root /mnt/tmp -o subvol=@/tmp,$MOUNTOPTS
-mount /dev/mapper/system-root /mnt/usr/local -o subvol=@/usr/local,$MOUNTOPTS
-mount /dev/mapper/system-root /mnt/var -o subvol=@/var,$MOUNTOPTS
+mount /dev/mapper/system-root $my_root_mount -o subvol=@,$MOUNTOPTS
+mount /dev/mapper/system-root $my_root_mount/.snapshots -o subvol=@/.snapshots,$MOUNTOPTS
+mount /dev/mapper/system-root $my_root_mount/boot/grub2/i386-pc -o subvol=@/boot/grub2/i386-pc,$MOUNTOPTS
+mount /dev/mapper/system-root $my_root_mount/boot/grub2/x86_64-efi -o subvol=@/boot/grub2/x86_64-efi,$MOUNTOPTS
+mount /dev/mapper/system-root $my_root_mount/opt -o subvol=@/opt,$MOUNTOPTS
+mount /dev/mapper/system-root $my_root_mount/root -o subvol=@/root,$MOUNTOPTS
+mount /dev/mapper/system-root $my_root_mount/srv -o subvol=@/srv,$MOUNTOPTS
+mount /dev/mapper/system-root $my_root_mount/tmp -o subvol=@/tmp,$MOUNTOPTS
+mount /dev/mapper/system-root $my_root_mount/usr/local -o subvol=@/usr/local,$MOUNTOPTS
+mount /dev/mapper/system-root $my_root_mount/var -o subvol=@/var,$MOUNTOPTS
 MOUNTOPTS=
 
 # Mount the EFI partition
-mkdir -p /mnt/boot/efi
-mount /dev/sda1 /mnt/boot/efi
+mkdir -p $my_root_mount/boot/efi
+mount /dev/sda1 $my_root_mount/boot/efi
 
 # Mount the home partition
-mkdir -p /mnt/home
-mount /dev/mapper/system-home /mnt/home
+mkdir -p $my_root_mount/home
+mount /dev/mapper/system-home $my_root_mount/home
 
 # Install base packages. "-K" tells pacstrap to generate a new pacman master key
-pacstrap -K /mnt "${pacstrap_pkgs[@]}"
+pacstrap $my_root_mount "${pacstrap_pkgs[@]}"
 
 # Generate the File System TABle (fstab) using UUID numbers
-genfstab -U /mnt >> /mnt/etc/fstab
+genfstab -U $my_root_mount >> $my_root_mount/etc/fstab
 
+# * * * Arch Chroot * * *
+echo Entering arch-chroot. Exiting script.
+echo $my_root_mount
+exit
 # * * * Arch Chroot * * *
 
 # Proceed with the installation
-arch-chroot /mnt
+arch-chroot $my_root_mount
 
 # Set-up the Time Zone
 ln -sf /usr/share/zoneinfo/America/Detroit /etc/localtime
