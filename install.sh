@@ -376,15 +376,15 @@ arch-chroot $my_root_mount touch /root/Scripts/enable_snapper_snapshots.sh
 arch-chroot $my_root_mount chmod +x /root/Scripts/enable_snapper_snapshots.sh
 { echo -e '#!/usr/bin/bash';
   echo -e 'btrfs subvolume delete /.snapshots/';
-  echo -e 'snapper -c root create-config';
+  echo -e 'snapper -c root create-config /';
   echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
-  echo 'sed -i 's/PRUNENAMES = ".git .hg .svn"/PRUNENAMES = ".git .hg .svn .snapshots"/' /etc/updatedb.conf";'
+  echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
+  echo -e 'snapper list-configs';
 } >> $my_root_mount/root/Scripts/enable_snapper_snapshots.sh
 
-
 # Create post install scripts for $my_user_id
-arch-chroot $my_root_mount touch /home/Scripts/$my_user_id/enable_yay.sh
-arch-chroot $my_root_mount chmod +x /home/Scripts/$my_user_id/enable_yay.sh
+arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/enable_yay.sh
+arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
 { echo -e '#!/usr/bin/bash';
   echo -e 'git clone https://aur.archlinux.org/yay.git';
   echo -e 'pushd yay';
@@ -392,7 +392,7 @@ arch-chroot $my_root_mount chmod +x /home/Scripts/$my_user_id/enable_yay.sh
   echo -e 'popd';
   echo -e 'yay -S brave-bin btrfs-assistant ttf-ms-fonts';
 } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
-arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/Scripts/$my_user_id/
+arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
 clear
 echo -e "${success_color}Please set a password for the new root account:${no_color}"
