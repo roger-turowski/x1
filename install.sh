@@ -64,6 +64,7 @@ gui_pkgs=(
     acpi
     acpi_call
     acpid
+    alacritty
     alsa-utils
     avahi
     base-devel
@@ -89,6 +90,7 @@ gui_pkgs=(
     gvfs-smb
     inetutils
     ipset
+    kitty
     linux-headers
     lvm2
     mc
@@ -316,16 +318,11 @@ arch-chroot $my_root_mount systemctl enable NetworkManager \
     acpid \
 
 # Make wheel group sudo enabled
-# EDITOR=vim visudo
-# Uncomment %wheel ALL=(ALL:ALL) ALL
-# The code to update sudoers file below needs to be verified!
-arch-chroot $my_root_mount SUDOER_TMP=$(mktemp)
-arch-chroot $my_root_mount cat $my_root_mount/etc/sudoers > "$SUDOER_TMP"
-arch-chroot $my_root_mount sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP"
-arch-chroot $my_root_mount visudo -c -f $SUDOER_TMP && cat $SUDOER_TMP > /etc/sudoers
-arch-chroot $my_root_mount rm $SUDOER_TMP
-
-read -pr "Press any key to continue..."
+SUDOER_TMP=$(mktemp)
+cat $my_root_mount/etc/sudoers > "$SUDOER_TMP"
+sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP"
+visudo -c -f $SUDOER_TMP && cat $SUDOER_TMP > $my_root_mount/etc/sudoers
+rm $SUDOER_TMP
 
 # Update mkinitcpio.conf
 arch-chroot $my_root_mount sed -i \
