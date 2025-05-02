@@ -2,6 +2,18 @@
 
 # See https://github.com/walian0/bashscripts/blob/main/arch_plasma_auto.bash
 
+# General Notes
+# =============
+# This build script is currently only supporting UEFI systems
+
+# Virtualbox Notes
+# ================
+# Enable EFI.
+# Assign a VBoxSVGA video adapter to use Wayland, else a black screen will appear.
+# Use a Bridged network adapter so ssh can be used for troubleshooting.
+
+# Error handling
+
 success_color="\e[1;32m"
 error_color="\e[1;31m"
 no_color="\e[0m"
@@ -242,14 +254,7 @@ pacstrap $my_root_mount "${pacstrap_pkgs[@]}"
 # Generate the File System TABle (fstab) using UUID numbers
 genfstab -U $my_root_mount >> $my_root_mount/etc/fstab
 
-# * * * Arch Chroot * * *
-# echo Entering arch-chroot. Exiting script.
-# echo $my_root_mount
-# exit
-# * * * Arch Chroot * * *
-
-# Proceed with the installation
-# arch-chroot $my_root_mount
+# Begin arch-chroot operations
 
 # Set-up the Time Zone
 arch-chroot $my_root_mount ln -sf /usr/share/zoneinfo/America/Detroit /etc/localtime
