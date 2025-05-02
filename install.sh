@@ -16,8 +16,11 @@ ok_result() {
 }
 
 # Initialize variables
-my_timezone=US/Michigan
+my_timezone="US/Michigan"
 my_root_mount="/mnt"
+my_host_name="arch"
+my_user_id="roger"
+my_password_hash="\$6\$1LOK.XIjsfKmOi/e\$U.zBYQYBdVLY.eUb2Y42/dzoNxPorbn1.aJ7VKQk/qBt7pzp6B1uGDSQCl63g83bk/zSZb9cHu4jKtC5Q0a1c."
 
 # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
 pacstrap_pkgs=(
@@ -27,6 +30,7 @@ pacstrap_pkgs=(
     dosfstools
     e2fsprogs
     git
+    grub-btrfs
     linux
     linux-firmware
     nano
@@ -83,6 +87,7 @@ gui_pkgs=(
     openbsd-netcat
     openssh
     os-prober
+    plocate
     pulseaudio
     reflector
     rsync
@@ -112,21 +117,18 @@ localectl set-keymap us
 # passwd
 
 # Set the time zone
-timedatectl set-timezone $my_timezone \
-  && ok_result " Time Zone set" \
-  || error_result "Could not set the time zone"
+timedatectl set-timezone $my_timezone
 
 # Configure ntp
-timedatectl set-ntp true \
-  && timedatectl status \
-  || error_result "Could not set-ntp"
+timedatectl set-ntp true
+timedatectl status
 
 # Set-up the fastest Arch mirrors
 # pacman --noconfirm -Sy reflector
 reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --save /etc/pacman.d/mirrorlist
 
 # Install tools useful during setup
-pacman --noconfirm -S fastfetch git tree bat tldr tmux nano
+pacman --noconfirm -Sy fastfetch git tree bat tldr tmux nano
 
 # Clear the disk
 sgdisk --zap-all --clear /dev/sda
@@ -241,136 +243,138 @@ pacstrap $my_root_mount "${pacstrap_pkgs[@]}"
 genfstab -U $my_root_mount >> $my_root_mount/etc/fstab
 
 # * * * Arch Chroot * * *
-echo Entering arch-chroot. Exiting script.
-echo $my_root_mount
-exit
+# echo Entering arch-chroot. Exiting script.
+# echo $my_root_mount
+# exit
 # * * * Arch Chroot * * *
 
 # Proceed with the installation
-arch-chroot $my_root_mount
+# arch-chroot $my_root_mount
 
 # Set-up the Time Zone
-ln -sf /usr/share/zoneinfo/America/Detroit /etc/localtime
+arch-chroot $my_root_mount ln -sf /usr/share/zoneinfo/America/Detroit /etc/localtime
 
 # Sync the Sytem Clock to the Hardware Clock
-hwclock --systohc
+arch-chroot $my_root_mount hwclock --systohc
 
 # Generate the locale
-sed -i '171s/.//' /etc/locale.gen
-locale-gen
-echo "LANG=en_US.UTF-8" >> /etc/locale.conf
+arch-chroot $my_root_mount sed -i '171s/.//' /etc/locale.gen
+arch-chroot $my_root_mount locale-gen
+echo "LANG=en_US.UTF-8" >> $my_root_mount/etc/locale.conf
 
 # Configure keyboard mapping (Copied from OpenSUSE Tumbleweed)
-{ echo "KEYMAP=us";
-  echo "FONT=eurlatgr";
-  echo "FONT_MAP=";
-  echo "FONT_UNIMAP=";
-  echo "XKBLAYOUT=us";
-  echo "XKBMODEL=pc105+inet";
-  echo "XKBOPTIONS=terminate:ctrl_alt_bksp";
- } >> /etc/vconsole.conf
+{ echo 'KEYMAP=us';
+  echo 'FONT=eurlatgr';
+  echo 'FONT_MAP=';
+  echo 'FONT_UNIMAP=';
+  echo 'XKBLAYOUT=us';
+  echo 'XKBMODEL=pc105+inet';
+  echo 'XKBOPTIONS=terminate:ctrl_alt_bksp';
+} >> $my_root_mount/etc/vconsole.conf
 
 # Configure the Host Name
-{ echo -e "arch" >> /etc/hostname;
-  echo -e "127.0.0.1\tlocalhost";
-  echo -e "::1\t\tlocalhost";
-  echo -e "127.0.1.1\tarch.localdomain\tarch"
-} >> /etc/hosts
+echo -e $my_host_name >> $my_root_mount/etc/hostname
+
+# Build the hosts file
+{ echo -e '127.0.0.1\tlocalhost';
+  echo -e '::1\t\tlocalhost';
+  echo -e '127.0.1.1\tarch.localdomain\tarch'
+} >> $my_root_mount/etc/hosts
 
 # Set a password for root
-echo root:change-me | chpasswd
+arch-chroot $my_root_mount echo root:change-me | chpasswd
 
 # Install the rest of the system packages
-pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
+arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
 
 # Uncomment below to install graphics card drivers
 # pacman -S --noconfirm xf86-video-amdgpu
 # pacman -S --noconfirm nvidia nvidia-utils nvidia-settings
 
 # Install GRUB
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
-grub-mkconfig -o /boot/grub/grub.cfg
+arch-chroot $my_root_mount grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
 
 # ToDo: Optimize this section
 # Enable Services
-systemctl enable NetworkManager
-systemctl enable bluetooth
-systemctl enable cups.service
-systemctl enable sshd
-systemctl enable avahi-daemon
-systemctl enable tlp
-systemctl enable reflector.timer
-systemctl enable fstrim.timer
-systemctl enable firewalld
-systemctl enable acpid
+arch-chroot $my_root_mount systemctl enable NetworkManager \
+    bluetooth \
+    cups.service \
+    sshd \
+    avahi-daemon \
+    tlp \
+    reflector.timer \
+    fstrim.timer \
+    firewalld \
+    acpid \
 
 # Make wheel group sudo enabled
 # EDITOR=vim visudo
 # Uncomment %wheel ALL=(ALL:ALL) ALL
 # The code to update sudoers file below needs to be verified!
-SUDOER_TMP=$(mktemp)
-cat /etc/sudoers > $SUDOER_TMP
-sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' $SUDOER_TMP
-visudo -c -f $SUDOER_TMP && \ # this will fail if the syntax is incorrect
-    cat $SUDOER_TMP > /etc/sudoers
-rm $SUDOER_TMP
+#arch-chroot $my_root_mount SUDOER_TMP=$(mktemp)
+#arch-chroot $my_root_mount cat /etc/sudoers > $SUDOER_TMP
+#arch-chroot $my_root_mount sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' $SUDOER_TMP
+#arch-chroot $my_root_mount visudo -c -f $SUDOER_TMP
+#arch-chroot $my_root_mount cat $SUDOER_TMP > /etc/sudoers
+#arch-chroot $my_root_mount rm $SUDOER_TMP
 
 # Update mkinitcpio.conf
 # vim /etc/mkinitcpio.conf
 # MODULES=(btrfs)
 # HOOKS=(... block lvm2 filesystems ...)
-sed -i \
+arch-chroot $my_root_mount sed -i \
     -e 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf \
-    -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs' \
+    -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs/' \
     /etc/mkinitcpio.conf
-mkinitcpio -p linux
+arch-chroot $my_root_mount mkinitcpio -p linux
 
 # Add a user account
-useradd -mG wheel roger
-echo roger:change-me | chpasswd
+arch-chroot $my_root_mount useradd -mG wheel -p $my_password_hash $my_user_id
 
-# ToDo: Clean tis section up
+# ToDo: Clean this section up
 # Install KDE Plasma and sddm
-pacman -S --needed --noconfirm xorg sddm
-pacman -S --needed --noconfirm plasma kde-applications
-systemctl enable sddm
+arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm
+arch-chroot $my_root_mount pacman -S --needed --noconfirm plasma kde-applications
+arch-chroot $my_root_mount systemctl enable sddm
 
 # Apply the Breeze theme to sddm
-mkdir /etc/sddm.conf.d/ && sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
+arch-chroot $my_root_mount mkdir /etc/sddm.conf.d/
+arch-chroot $my_root_mount  sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
 # Add some useful applications
-pacman -S tree wireshark-qt ttf-0xproto-nerd ttf-cascadia-code-nerd ttf-cascadia-mono-nerd ttf-firacode-nerd ttf-hack-nerd ttf-jetbrains-mono-nerd ttf-sourcecodepro-nerd curl plocate btop htop fastfetch tmux tldr zellij git eza bat xrdp mc vifm tldr fzf
+arch-chroot $my_root_mount pacman -S --noconfirm tree wireshark-qt ttf-0xproto-nerd ttf-cascadia-code-nerd ttf-cascadia-mono-nerd ttf-firacode-nerd ttf-hack-nerd ttf-jetbrains-mono-nerd ttf-sourcecodepro-nerd curl plocate btop htop fastfetch tmux tldr zellij git eza bat xrdp mc vifm tldr fzf
 
 # Finish configuring snapper
-pacman -S snapper snap-pac grub-btrfs inotify-tools
-btrfs subvolume delete /.snapshots/
-snapper -c root create-config /
-snapper list-configs
-snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes
-sed -i 's/PRUNENAMES = ".git .hg .svn"/PRUNENAMES = ".git .hg .svn .snapshots"/' /etc/updatedb.conf
+arch-chroot $my_root_mount pacman -S --noconfirm snapper snap-pac inotify-tools
+#arch-chroot $my_root_mount btrfs subvolume delete /.snapshots/
+#arch-chroot $my_root_mount snapper -c root create-config /
+#arch-chroot $my_root_mount snapper list-configs
+#arch-chroot $my_root_mount snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes
+#arch-chroot $my_root_mount sed -i 's/PRUNENAMES = ".git .hg .svn"/PRUNENAMES = ".git .hg .svn .snapshots"/' /etc/updatedb.conf
 
 # Configure GRUB for snapshot recovery
-sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
-grub-mkconfig -o /boot/grub/grub.cfg
-systemctl enable grub-btrfsd
-systemctl enable snapper-boot.timer
+arch-chroot $my_root_mount sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
+arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
+arch-chroot $my_root_mount systemctl enable grub-btrfsd
+arch-chroot $my_root_mount systemctl enable snapper-boot.timer
 
 # /etc/updatedb.conf
 # PRUNENAMES = ".snapshots"
 
 # Finish and reboot
-exit
-umount -a
-systemctl reboot
-
+# exit
+# umount -a
+# systemctl reboot
+echo Script finished! Please use arch-chroot to set a root password, unmount all and reboot.
 
 
 # Log on as a regular user
 
 # Install an AUR helper
-sudo pacman -S --needed base-devel git
-git clone https://aur.archlinux.org/yay.git
-pushd yay
-makepkg -si
-popd
-yay -S brave-bin btrfs-assistant ttf-ms-fonts
+# sudo pacman -S --needed base-devel git
+# git clone https://aur.archlinux.org/yay.git
+# pushd yay
+# makepkg -si
+# popd
+# yay -S brave-bin btrfs-assistant ttf-ms-fonts
