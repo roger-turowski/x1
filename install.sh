@@ -4,7 +4,7 @@
 
 # General Notes
 # =============
-# This build script is currently only supporting UEFI systems
+# This build script currently only supports UEFI systems
 
 # Virtualbox Notes
 # ================
@@ -289,7 +289,7 @@ echo -e $my_host_name >> $my_root_mount/etc/hostname
 } >> $my_root_mount/etc/hosts
 
 # Set a password for root
-arch-chroot $my_root_mount echo root:change-me | chpasswd
+# arch-chroot $my_root_mount echo root:change-me | chpasswd
 
 # Install the rest of the system packages
 arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
@@ -319,17 +319,15 @@ arch-chroot $my_root_mount systemctl enable NetworkManager \
 # EDITOR=vim visudo
 # Uncomment %wheel ALL=(ALL:ALL) ALL
 # The code to update sudoers file below needs to be verified!
-#arch-chroot $my_root_mount SUDOER_TMP=$(mktemp)
-#arch-chroot $my_root_mount cat /etc/sudoers > $SUDOER_TMP
-#arch-chroot $my_root_mount sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' $SUDOER_TMP
-#arch-chroot $my_root_mount visudo -c -f $SUDOER_TMP
-#arch-chroot $my_root_mount cat $SUDOER_TMP > /etc/sudoers
-#arch-chroot $my_root_mount rm $SUDOER_TMP
+arch-chroot $my_root_mount SUDOER_TMP=$(mktemp)
+arch-chroot $my_root_mount cat $my_root_mount/etc/sudoers > "$SUDOER_TMP"
+arch-chroot $my_root_mount sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP"
+arch-chroot $my_root_mount visudo -c -f $SUDOER_TMP && cat $SUDOER_TMP > /etc/sudoers
+arch-chroot $my_root_mount rm $SUDOER_TMP
+
+read -pr "Press any key to continue..."
 
 # Update mkinitcpio.conf
-# vim /etc/mkinitcpio.conf
-# MODULES=(btrfs)
-# HOOKS=(... block lvm2 filesystems ...)
 arch-chroot $my_root_mount sed -i \
     -e 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf \
     -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs/' \
@@ -352,7 +350,7 @@ arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sd
 # Add some useful applications
 arch-chroot $my_root_mount pacman -S --noconfirm tree wireshark-qt ttf-0xproto-nerd ttf-cascadia-code-nerd ttf-cascadia-mono-nerd ttf-firacode-nerd ttf-hack-nerd ttf-jetbrains-mono-nerd ttf-sourcecodepro-nerd curl plocate btop htop fastfetch tmux tldr zellij git eza bat xrdp mc vifm tldr fzf
 
-# Finish configuring snapper
+# Install snapper
 arch-chroot $my_root_mount pacman -S --noconfirm snapper snap-pac inotify-tools
 #arch-chroot $my_root_mount btrfs subvolume delete /.snapshots/
 #arch-chroot $my_root_mount snapper -c root create-config /
@@ -366,11 +364,8 @@ arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
 arch-chroot $my_root_mount systemctl enable grub-btrfsd
 arch-chroot $my_root_mount systemctl enable snapper-boot.timer
 
-# Copy this script to the root home directory
-cp ~/install.sh $my_root_mount/root
-
 # Allow root to have ssh access initially for troubleshooting while developing
-arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_conf
+arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
 # Create post-install scripts for root
 mkdir $my_root_mount/root/Scripts
@@ -398,6 +393,9 @@ arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
 arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
 clear
+# Copy this script to the root home directory
+cp ~/install.sh $my_root_mount/root/Scripts
+
 echo -e "${success_color}Please set a password for the new root account:${no_color}"
 arch-chroot $my_root_mount passwd root
 echo Script finished! Please unmount all and reboot.
