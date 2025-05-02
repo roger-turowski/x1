@@ -11,6 +11,8 @@
 # Enable EFI.
 # Assign a VBoxSVGA video adapter to use Wayland, else a black screen will appear.
 # Use a Bridged network adapter so ssh can be used for troubleshooting.
+# Set a root password to enable connecting via ssh
+
 
 # Error handling
 
@@ -383,6 +385,7 @@ arch-chroot $my_root_mount chmod +x /root/Scripts/enable_snapper_snapshots.sh
 } >> $my_root_mount/root/Scripts/enable_snapper_snapshots.sh
 
 # Create post install scripts for $my_user_id
+arch-chroot $my_root_mount mkdir /home/$my_user_id/Scripts/
 arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/enable_yay.sh
 arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
 { echo -e '#!/usr/bin/bash';
