@@ -339,8 +339,8 @@ arch-chroot $my_root_mount pacman -S --needed --noconfirm plasma kde-application
 arch-chroot $my_root_mount systemctl enable sddm
 
 # Apply the Breeze theme to sddm
-arch-chroot $my_root_mount mkdir /etc/sddm.conf.d/
-arch-chroot $my_root_mount  sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
+mkdir $my_root_mount/etc/sddm.conf.d/
+arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
 # Add some useful applications
 arch-chroot $my_root_mount pacman -S --noconfirm tree wireshark-qt ttf-0xproto-nerd ttf-cascadia-code-nerd ttf-cascadia-mono-nerd ttf-firacode-nerd ttf-hack-nerd ttf-jetbrains-mono-nerd ttf-sourcecodepro-nerd curl plocate btop htop fastfetch tmux tldr zellij git eza bat xrdp mc vifm tldr fzf
@@ -359,22 +359,37 @@ arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
 arch-chroot $my_root_mount systemctl enable grub-btrfsd
 arch-chroot $my_root_mount systemctl enable snapper-boot.timer
 
-# /etc/updatedb.conf
-# PRUNENAMES = ".snapshots"
+# Copy this script to the root home directory
+cp ~/install.sh $my_root_mount/root
 
-# Finish and reboot
-# exit
-# umount -a
-# systemctl reboot
-echo Script finished! Please use arch-chroot to set a root password, unmount all and reboot.
+# Allow root to have ssh access initially for troubleshooting while developing
+arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_conf
+
+# Create post-install scripts for root
+mkdir $my_root_mount/root/Scripts
+arch-chroot $my_root_mount touch /root/Scripts/enable_snapper_snapshots.sh
+arch-chroot $my_root_mount chmod +x /root/Scripts/enable_snapper_snapshots.sh
+{ echo -e '#!/usr/bin/bash';
+  echo -e 'btrfs subvolume delete /.snapshots/';
+  echo -e 'snapper -c root create-config';
+  echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
+  echo 'sed -i 's/PRUNENAMES = ".git .hg .svn"/PRUNENAMES = ".git .hg .svn .snapshots"/' /etc/updatedb.conf";'
+} >> $my_root_mount/root/Scripts/enable_snapper_snapshots.sh
 
 
-# Log on as a regular user
+# Create post install scripts for $my_user_id
+arch-chroot $my_root_mount touch /home/Scripts/$my_user_id/enable_yay.sh
+arch-chroot $my_root_mount chmod +x /home/Scripts/$my_user_id/enable_yay.sh
+{ echo -e '#!/usr/bin/bash';
+  echo -e 'git clone https://aur.archlinux.org/yay.git';
+  echo -e 'pushd yay';
+  echo -e 'makepkg -si';
+  echo -e 'popd';
+  echo -e 'yay -S brave-bin btrfs-assistant ttf-ms-fonts';
+} >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
+arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/Scripts/$my_user_id/
 
-# Install an AUR helper
-# sudo pacman -S --needed base-devel git
-# git clone https://aur.archlinux.org/yay.git
-# pushd yay
-# makepkg -si
-# popd
-# yay -S brave-bin btrfs-assistant ttf-ms-fonts
+clear
+echo -e "${success_color}Please set a password for the new root account:${no_color}"
+arch-chroot $my_root_mount passwd root
+echo Script finished! Please unmount all and reboot.
