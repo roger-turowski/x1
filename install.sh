@@ -247,7 +247,7 @@ MOUNTOPTS=
 
 # Mount the EFI partition
 mkdir -p $my_root_mount/boot/efi
-mount /dev/nvme0n11 $my_root_mount/boot/efi
+mount /dev/nvme0n1p1 $my_root_mount/boot/efi
 
 # Mount the home partition
 mkdir -p $my_root_mount/home
