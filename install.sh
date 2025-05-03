@@ -30,6 +30,7 @@ ok_result() {
 }
 
 # Initialize variables
+my_disk="nvme0n1"
 my_timezone="US/Michigan"
 my_root_mount="/mnt"
 my_host_name="arch"
@@ -147,25 +148,25 @@ reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --s
 pacman --noconfirm -Sy fastfetch git tree bat tldr tmux nano
 
 # Clear the disk
-sgdisk --zap-all --clear /dev/sda
+sgdisk --zap-all --clear /dev/nvme0n1
 
 # PHYSICAL PARTITIONS
 
 # Create the physical EFI partition
-sgdisk --new=1:0:+4G --typecode=1:ef00 --change-name=1:EFI /dev/sda
+sgdisk --new=1:0:+4G --typecode=1:ef00 --change-name=1:EFI /dev/nvme0n1
 
 # Create the physical partition for root, swap and home
-sgdisk --new=2:0:0 --typecode=2:8e00 --change-name=2:root /dev/sda
+sgdisk --new=2:0:0 --typecode=2:8e00 --change-name=2:root /dev/nvme0n1
 
 # PHYSICAL VOLUMES
 
 # Create a physical volume to contain the volume group "system"
-pvcreate /dev/sda2
+pvcreate /dev/nvme0n1p2
 
 # VOLUME GROUPS
 
 # Create the volume group for root, swap and home
-vgcreate system /dev/sda2
+vgcreate system /dev/nvme0n1p2
 
 # LOGICAL VOLUMES 
 
@@ -177,7 +178,7 @@ lvcreate -l 100%FREE -n home system
 # FORMAT THE PARTITIONS
 
 # Format the EFI partition
-mkfs.fat -n EFI -F32 /dev/sda1
+mkfs.fat -n EFI -F32 /dev/nvme0n1p1
 
 # Format the root volume with BTRFS
 mkfs.btrfs -L root /dev/system/root
@@ -246,7 +247,7 @@ MOUNTOPTS=
 
 # Mount the EFI partition
 mkdir -p $my_root_mount/boot/efi
-mount /dev/sda1 $my_root_mount/boot/efi
+mount /dev/nvme0n11 $my_root_mount/boot/efi
 
 # Mount the home partition
 mkdir -p $my_root_mount/home
