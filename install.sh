@@ -2,6 +2,20 @@
 
 # See https://github.com/walian0/bashscripts/blob/main/arch_plasma_auto.bash
 
+# General Notes
+# =============
+# This build script currently only supports UEFI systems
+
+# Virtualbox Notes
+# ================
+# Enable EFI.
+# Assign a VBoxSVGA video adapter to use Wayland, else a black screen will appear.
+# Use a Bridged network adapter so ssh can be used for troubleshooting.
+# Set a root password to enable connecting via ssh
+
+
+# Error handling
+
 success_color="\e[1;32m"
 error_color="\e[1;31m"
 no_color="\e[0m"
@@ -16,6 +30,7 @@ ok_result() {
 }
 
 # Initialize variables
+my_disk="nvme0n1"
 my_timezone="US/Michigan"
 my_root_mount="/mnt"
 my_host_name="arch"
@@ -50,6 +65,7 @@ gui_pkgs=(
     acpi
     acpi_call
     acpid
+    alacritty
     alsa-utils
     avahi
     base-devel
@@ -75,6 +91,7 @@ gui_pkgs=(
     gvfs-smb
     inetutils
     ipset
+    kitty
     linux-headers
     lvm2
     mc
@@ -147,25 +164,25 @@ reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --s
 pacman --noconfirm -Sy fastfetch git tree bat tldr tmux nano
 
 # Clear the disk
-sgdisk --zap-all --clear /dev/sda
+sgdisk --zap-all --clear /dev/nvme0n1
 
 # PHYSICAL PARTITIONS
 
 # Create the physical EFI partition
-sgdisk --new=1:0:+4G --typecode=1:ef00 --change-name=1:EFI /dev/sda
+sgdisk --new=1:0:+4G --typecode=1:ef00 --change-name=1:EFI /dev/nvme0n1
 
 # Create the physical partition for root, swap and home
-sgdisk --new=2:0:0 --typecode=2:8e00 --change-name=2:root /dev/sda
+sgdisk --new=2:0:0 --typecode=2:8e00 --change-name=2:root /dev/nvme0n1
 
 # PHYSICAL VOLUMES
 
 # Create a physical volume to contain the volume group "system"
-pvcreate /dev/sda2
+pvcreate /dev/nvme0n1p2
 
 # VOLUME GROUPS
 
 # Create the volume group for root, swap and home
-vgcreate system /dev/sda2
+vgcreate system /dev/nvme0n1p2
 
 # LOGICAL VOLUMES 
 
@@ -177,7 +194,7 @@ lvcreate -l 100%FREE -n home system
 # FORMAT THE PARTITIONS
 
 # Format the EFI partition
-mkfs.fat -n EFI -F32 /dev/sda1
+mkfs.fat -n EFI -F32 /dev/nvme0n1p1
 
 # Format the root volume with BTRFS
 mkfs.btrfs -L root /dev/system/root
@@ -246,7 +263,7 @@ MOUNTOPTS=
 
 # Mount the EFI partition
 mkdir -p $my_root_mount/boot/efi
-mount /dev/sda1 $my_root_mount/boot/efi
+mount /dev/nvme0n1p1 $my_root_mount/boot/efi
 
 # Mount the home partition
 mkdir -p $my_root_mount/home
@@ -258,14 +275,7 @@ pacstrap $my_root_mount "${pacstrap_pkgs[@]}"
 # Generate the File System TABle (fstab) using UUID numbers
 genfstab -U $my_root_mount >> $my_root_mount/etc/fstab
 
-# * * * Arch Chroot * * *
-# echo Entering arch-chroot. Exiting script.
-# echo $my_root_mount
-# exit
-# * * * Arch Chroot * * *
-
-# Proceed with the installation
-# arch-chroot $my_root_mount
+# Begin arch-chroot operations
 
 # Set-up the Time Zone
 arch-chroot $my_root_mount ln -sf /usr/share/zoneinfo/America/Detroit /etc/localtime
@@ -298,7 +308,7 @@ echo -e $my_host_name >> $my_root_mount/etc/hostname
 } >> $my_root_mount/etc/hosts
 
 # Set a password for root
-arch-chroot $my_root_mount echo root:change-me | chpasswd
+# arch-chroot $my_root_mount echo root:change-me | chpasswd
 
 # Install the rest of the system packages
 arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
@@ -325,20 +335,13 @@ arch-chroot $my_root_mount systemctl enable NetworkManager \
     acpid \
 
 # Make wheel group sudo enabled
-# EDITOR=vim visudo
-# Uncomment %wheel ALL=(ALL:ALL) ALL
-# The code to update sudoers file below needs to be verified!
-#arch-chroot $my_root_mount SUDOER_TMP=$(mktemp)
-#arch-chroot $my_root_mount cat /etc/sudoers > $SUDOER_TMP
-#arch-chroot $my_root_mount sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' $SUDOER_TMP
-#arch-chroot $my_root_mount visudo -c -f $SUDOER_TMP
-#arch-chroot $my_root_mount cat $SUDOER_TMP > /etc/sudoers
-#arch-chroot $my_root_mount rm $SUDOER_TMP
+SUDOER_TMP=$(mktemp)
+cat $my_root_mount/etc/sudoers > "$SUDOER_TMP"
+sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP"
+visudo -c -f $SUDOER_TMP && cat $SUDOER_TMP > $my_root_mount/etc/sudoers
+rm $SUDOER_TMP
 
 # Update mkinitcpio.conf
-# vim /etc/mkinitcpio.conf
-# MODULES=(btrfs)
-# HOOKS=(... block lvm2 filesystems ...)
 arch-chroot $my_root_mount sed -i \
     -e 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf \
     -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs/' \
@@ -355,13 +358,13 @@ arch-chroot $my_root_mount pacman -S --needed --noconfirm plasma kde-application
 arch-chroot $my_root_mount systemctl enable sddm
 
 # Apply the Breeze theme to sddm
-arch-chroot $my_root_mount mkdir /etc/sddm.conf.d/
-arch-chroot $my_root_mount  sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
+mkdir $my_root_mount/etc/sddm.conf.d/
+arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
 # Add some useful applications
 arch-chroot $my_root_mount pacman -S --noconfirm tree wireshark-qt ttf-0xproto-nerd ttf-cascadia-code-nerd ttf-cascadia-mono-nerd ttf-firacode-nerd ttf-hack-nerd ttf-jetbrains-mono-nerd ttf-sourcecodepro-nerd curl plocate btop htop fastfetch tmux tldr zellij git eza bat xrdp mc vifm tldr fzf
 
-# Finish configuring snapper
+# Install snapper
 arch-chroot $my_root_mount pacman -S --noconfirm snapper snap-pac inotify-tools
 #arch-chroot $my_root_mount btrfs subvolume delete /.snapshots/
 #arch-chroot $my_root_mount snapper -c root create-config /
@@ -375,22 +378,38 @@ arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
 arch-chroot $my_root_mount systemctl enable grub-btrfsd
 arch-chroot $my_root_mount systemctl enable snapper-boot.timer
 
-# /etc/updatedb.conf
-# PRUNENAMES = ".snapshots"
+# Allow root to have ssh access initially for troubleshooting while developing
+arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
-# Finish and reboot
-# exit
-# umount -a
-# systemctl reboot
-echo Script finished! Please use arch-chroot to set a root password, unmount all and reboot.
+# Create post-install scripts for root
+mkdir $my_root_mount/root/Scripts
+arch-chroot $my_root_mount touch /root/Scripts/enable_snapper_snapshots.sh
+arch-chroot $my_root_mount chmod +x /root/Scripts/enable_snapper_snapshots.sh
+{ echo -e '#!/usr/bin/bash';
+  echo -e 'btrfs subvolume delete /.snapshots/';
+  echo -e 'snapper -c root create-config /';
+  echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
+  echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
+  echo -e 'snapper list-configs';
+} >> $my_root_mount/root/Scripts/enable_snapper_snapshots.sh
 
+# Create post install scripts for $my_user_id
+arch-chroot $my_root_mount mkdir /home/$my_user_id/Scripts/
+arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/enable_yay.sh
+arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
+{ echo -e '#!/usr/bin/bash';
+  echo -e 'git clone https://aur.archlinux.org/yay.git';
+  echo -e 'pushd yay';
+  echo -e 'makepkg -si';
+  echo -e 'popd';
+  echo -e 'yay -S brave-bin btrfs-assistant ttf-ms-fonts';
+} >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
+arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
-# Log on as a regular user
+clear
+# Copy this script to the root home directory
+cp ~/install.sh $my_root_mount/root/Scripts
 
-# Install an AUR helper
-# sudo pacman -S --needed base-devel git
-# git clone https://aur.archlinux.org/yay.git
-# pushd yay
-# makepkg -si
-# popd
-# yay -S brave-bin btrfs-assistant ttf-ms-fonts
+echo -e "${success_color}Please set a password for the new root account:${no_color}"
+arch-chroot $my_root_mount passwd root
+echo Script finished! Please unmount all and reboot.
