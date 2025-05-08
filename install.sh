@@ -96,8 +96,24 @@ gui_pkgs=(
     tlp
     tmux
     tree
+    ttf-0xproto-nerd
+    ttf-cascadia-code-nerd
+    ttf-cascadia-mono-nerd
+    ttf-firacode-nerd
+    ttf-hack-nerd
+    ttf-jetbrains-mono-nerd
+    ttf-liberation-mono-nerd
+    ttf-meslo-nerd
+    ttf-mononoki-nerd
+    ttf-nerd-fonts-symbols-mono
+    ttf-noto-nerd
+    ttf-roboto-mono-nerd
+    ttf-sourcecodepro-nerd
+    ttf-terminus-nerd
+    ttf-ubuntu-mono-nerd
     vde2
     vifm
+    whois
     wpa_supplicant
     xdg-user-dirs
     xdg-utils
