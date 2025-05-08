@@ -30,7 +30,7 @@ ok_result() {
 }
 
 # Initialize variables
-my_disk="nvme0n1"
+###my_disk="nvme0n1"
 my_timezone="US/Michigan"
 my_root_mount="/mnt"
 my_host_name="arch"
@@ -56,7 +56,7 @@ pacstrap_pkgs=(
 )
 
 # Detect the CPU type to install appropriate firmware
-cat /proc/cpuinfo | grep -m 1 "GenuineIntel" && cpu_firmware="intel-ucode" || cpu_firmware="amd-ucode"
+grep -m 1 "GenuineIntel" "/proc/cpuinfo" && cpu_firmware="intel-ucode" || cpu_firmware="amd-ucode"
 
 # Add the correct CPU firmware to the pacstrap_pkgs array
 pacstrap_pkgs+=("$cpu_firmware")
@@ -338,8 +338,8 @@ arch-chroot $my_root_mount systemctl enable NetworkManager \
 SUDOER_TMP=$(mktemp)
 cat $my_root_mount/etc/sudoers > "$SUDOER_TMP"
 sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP"
-visudo -c -f $SUDOER_TMP && cat $SUDOER_TMP > $my_root_mount/etc/sudoers
-rm $SUDOER_TMP
+visudo -c -f "$SUDOER_TMP" && cat "$SUDOER_TMP" > "$my_root_mount/etc/sudoers"
+rm "$SUDOER_TMP"
 
 # Update mkinitcpio.conf
 arch-chroot $my_root_mount sed -i \
