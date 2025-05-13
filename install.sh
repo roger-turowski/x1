@@ -13,8 +13,9 @@
 # Use a Bridged network adapter so ssh can be used for troubleshooting.
 # Set a root password to enable connecting via ssh
 
-
 # Error handling
+
+set -euo
 
 success_color="\e[1;32m"
 error_color="\e[1;31m"
@@ -30,7 +31,6 @@ ok_result() {
 }
 
 # Initialize variables
-###my_disk="nvme0n1"
 my_timezone="US/Michigan"
 my_root_mount="/mnt"
 my_host_name="arch"
