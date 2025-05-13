@@ -35,7 +35,8 @@ my_timezone="US/Michigan"
 my_root_mount="/mnt"
 my_host_name="arch"
 my_user_id="roger"
-my_password_hash="\$6\$1LOK.XIjsfKmOi/e\$U.zBYQYBdVLY.eUb2Y42/dzoNxPorbn1.aJ7VKQk/qBt7pzp6B1uGDSQCl63g83bk/zSZb9cHu4jKtC5Q0a1c."
+# To Do: Make a password hask here with mkpasswd and assign to my_password_hash at runtime
+my_password_hash=""
 
 # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
 pacstrap_pkgs=(
