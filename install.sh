@@ -6,12 +6,18 @@
 # =============
 # This build script currently only supports UEFI systems
 
-# Virtualbox Notes
-# ================
+# Virtualbox Guest Notes
+# ======================
 # Enable EFI.
 # Assign a VBoxSVGA video adapter to use Wayland, else a black screen will appear.
-# Use a Bridged network adapter so ssh can be used for troubleshooting.
+# Use a Bridged network adapter so ssh can be used for installation and troubleshooting.
 # Set a root password to enable connecting via ssh
+
+#check if we're root
+if [[ "$UID" -ne 0 ]]; then
+    echo "This script needs to be run as root!" >&2
+    exit 3
+fi
 
 # Error handling
 
@@ -40,20 +46,20 @@ my_password_hash=""
 
 # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
 pacstrap_pkgs=(
-    base
-    btrfs-progs
-    cryptsetup
-    dosfstools
-    e2fsprogs
-    git
-    grub-btrfs
-    linux
-    linux-firmware
-    nano
-    networkmanager
-    sudo
-    util-linux
-    vim
+  base
+  btrfs-progs
+  cryptsetup
+  dosfstools
+  e2fsprogs
+  git
+  grub-btrfs
+  linux
+  linux-firmware
+  nano
+  networkmanager
+  sudo
+  util-linux
+  vim
 )
 
 # Detect the CPU type to install appropriate firmware
@@ -63,78 +69,78 @@ grep -m 1 "GenuineIntel" "/proc/cpuinfo" && cpu_firmware="intel-ucode" || cpu_fi
 pacstrap_pkgs+=("$cpu_firmware")
 
 gui_pkgs=(
-    acpi
-    acpi_call
-    acpid
-    alacritty
-    alsa-utils
-    avahi
-    base-devel
-    bash-completion
-    bat
-    bluez
-    bluez-utils
-    bridge-utils
-    cups
-    dialog
-    dnsmasq
-    dnsutils
-    dosfstools
-    edk2-ovmf
-    efibootmgr
-    eza
-    fastfetch
-    firewalld
-    flatpak
-    fzf
-    grub
-    gvfs
-    gvfs-smb
-    inetutils
-    ipset
-    kitty
-    linux-headers
-    lvm2
-    mc
-    mtools
-    network-manager-applet
-    networkmanager
-    nfs-utils
-    nss-mdns
-    ntfs-3g
-    openbsd-netcat
-    openssh
-    os-prober
-    plocate
-    pulseaudio
-    reflector
-    rsync
-    sof-firmware
-    terminus-font 
-    tlp
-    tmux
-    tree
-    ttf-0xproto-nerd
-    ttf-cascadia-code-nerd
-    ttf-cascadia-mono-nerd
-    ttf-firacode-nerd
-    ttf-hack-nerd
-    ttf-jetbrains-mono-nerd
-    ttf-liberation-mono-nerd
-    ttf-meslo-nerd
-    ttf-mononoki-nerd
-    ttf-nerd-fonts-symbols-mono
-    ttf-noto-nerd
-    ttf-roboto-mono-nerd
-    ttf-sourcecodepro-nerd
-    ttf-terminus-nerd
-    ttf-ubuntu-mono-nerd
-    vde2
-    vifm
-    whois
-    wpa_supplicant
-    xdg-user-dirs
-    xdg-utils
+  acpi
+  acpi_call
+  acpid
+  alacritty
+  alsa-utils
+  avahi
+  base-devel
+  bash-completion
+  bat
+  bluez
+  bluez-utils
+  bridge-utils
+  cups
+  dialog
+  dnsmasq
+  dnsutils
+  dosfstools
+  edk2-ovmf
+  efibootmgr
+  eza
+  fastfetch
+  firewalld
+  flatpak
+  fzf
+  grub
+  gvfs
+  gvfs-smb
+  inetutils
+  ipset
+  kitty
+  linux-headers
+  lvm2
+  mc
+  mtools
+  network-manager-applet
+  networkmanager
+  nfs-utils
+  nss-mdns
+  ntfs-3g
+  openbsd-netcat
+  openssh
+  os-prober
+  plocate
+  pulseaudio
+  reflector
+  rsync
+  sof-firmware
+  terminus-font 
+  tlp
+  tmux
+  tree
+  ttf-0xproto-nerd
+  ttf-cascadia-code-nerd
+  ttf-cascadia-mono-nerd
+  ttf-firacode-nerd
+  ttf-hack-nerd
+  ttf-jetbrains-mono-nerd
+  ttf-liberation-mono-nerd
+  ttf-meslo-nerd
+  ttf-mononoki-nerd
+  ttf-nerd-fonts-symbols-mono
+  ttf-noto-nerd
+  ttf-roboto-mono-nerd
+  ttf-sourcecodepro-nerd
+  ttf-terminus-nerd
+  ttf-ubuntu-mono-nerd
+  vde2
+  vifm
+  whois
+  wpa_supplicant
+  xdg-user-dirs
+  xdg-utils
 )
 
 # Configure keyboard
@@ -158,7 +164,6 @@ timedatectl set-ntp true
 timedatectl status
 
 # Set-up the fastest Arch mirrors
-# pacman --noconfirm -Sy reflector
 reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --save /etc/pacman.d/mirrorlist
 
 # Install tools useful during setup
@@ -174,6 +179,9 @@ sgdisk --new=1:0:+4G --typecode=1:ef00 --change-name=1:EFI /dev/nvme0n1
 
 # Create the physical partition for root, swap and home
 sgdisk --new=2:0:0 --typecode=2:8e00 --change-name=2:root /dev/nvme0n1
+
+# Display a disk summary
+partprobe -s /dev/nvme0n1
 
 # PHYSICAL VOLUMES
 
@@ -414,3 +422,5 @@ cp ~/install.sh $my_root_mount/root/Scripts
 echo -e "${success_color}Please set a password for the new root account:${no_color}"
 arch-chroot $my_root_mount passwd root
 echo Script finished! Please unmount all and reboot.
+
+sync
