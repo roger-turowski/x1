@@ -13,36 +13,57 @@
 # Use a Bridged network adapter so ssh can be used for installation and troubleshooting.
 # Set a root password to enable connecting via ssh
 
-#check if we're root
-if [[ "$UID" -ne 0 ]]; then
-    echo "This script needs to be run as root!" >&2
-    exit 3
-fi
-
 # Error handling
 
 set -euo
 
 success_color="\e[1;32m"
 error_color="\e[1;31m"
+warning_color="\e[1;33m"
+info_color="\e[1;34m"
 no_color="\e[0m"
 
 error_result() {
-	echo -e "[  ${error_color}ERR{no_color} ] $1"
+	# [     OK     ]
+  # [   ERROR    ]
+  # [  WARNING   ]
+  # [    INFO    ]
+  echo -e "[   ${error_color}ERR{no_color}    ] $1"
 	exit 1
 }
 
 ok_result() {
-	echo -e "[  ${success_color}OK${no_color} ] $1"
+	echo -e "[     ${success_color}OK${no_color}     ] $1"
 }
+
+warning_result() {
+	echo -e "[  ${warning_color}WARN{no_color}   ] $1"
+  read -p "Press the Enter key to continue"
+}
+
+info_result() {
+	echo -e "[    ${info_color}INFO{no_color}   ] $1"
+}
+
+#check if we're root
+if [[ "$UID" -ne 0 ]]; then
+  error_result "This script must be run as root!"
+fi
 
 # Initialize variables
 my_timezone="US/Michigan"
 my_root_mount="/mnt"
 my_host_name="arch"
 my_user_id="roger"
-# To Do: Make a password hask here with mkpasswd and assign to my_password_hash at runtime
-my_password_hash=""
+my_full_name="Roger Turowski"
+
+
+# To Do: Make a password hash here with mkpasswd and assign to my_password_hash at runtime
+echo "Create a password for $my_user_id"
+my_password_hash=$(mkpasswd -m sha-512)
+
+# The password hash will need the dollar sign characters escaped
+my_password_hash=${my_password_hash//\$/\\\$}
 
 # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
 pacstrap_pkgs=(
@@ -63,10 +84,17 @@ pacstrap_pkgs=(
 )
 
 # Detect the CPU type to install appropriate firmware
-grep -m 1 "GenuineIntel" "/proc/cpuinfo" && cpu_firmware="intel-ucode" || cpu_firmware="amd-ucode"
-
-# Add the correct CPU firmware to the pacstrap_pkgs array
-pacstrap_pkgs+=("$cpu_firmware")
+if (grep -m 1 "GenuineIntel" "/proc/cpuinfo"); then
+  cpu_firmware="intel-ucode"
+  ok_result "Intel CPU was found"
+  pacstrap_pkgs+=("$cpu_firmware")
+elif (grep -m 1 "AuthenticAMD"); then
+  cpu_firmware="amd-ucode"
+  ok_result "AMD CPU was found"
+  pacstrap_pkgs+=("$cpu_firmware")
+else
+  info_result "No CPU micro-code is available for this CPU."
+fi
 
 gui_pkgs=(
   acpi
@@ -358,7 +386,7 @@ arch-chroot $my_root_mount sed -i \
 arch-chroot $my_root_mount mkinitcpio -p linux
 
 # Add a user account
-arch-chroot $my_root_mount useradd -mG wheel -p $my_password_hash $my_user_id
+arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -p "$my_password_hash" $my_user_id
 
 # ToDo: Clean this section up
 # Install KDE Plasma and sddm
