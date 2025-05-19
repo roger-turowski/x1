@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 
 # See https://github.com/walian0/bashscripts/blob/main/arch_plasma_auto.bash
 
@@ -28,7 +28,7 @@ error_result() {
   # [   ERROR    ]
   # [  WARNING   ]
   # [    INFO    ]
-  echo -e "[   ${error_color}ERR{no_color}    ] $1"
+  echo -e "[   ${error_color}ERR$${no_color}    ] $1"
 	exit 1
 }
 
@@ -37,15 +37,15 @@ ok_result() {
 }
 
 warning_result() {
-	echo -e "[  ${warning_color}WARN{no_color}   ] $1"
-  read -p "Press the Enter key to continue"
+	echo -e "[  ${warning_color}WARN${no_color}   ] $1"
+  read -p -r "Press the Enter key to continue"
 }
 
 info_result() {
-	echo -e "[    ${info_color}INFO{no_color}   ] $1"
+	echo -e "[    ${info_color}INFO${no_color}   ] $1"
 }
 
-#check if we're root
+# Ensure the script is being run by root
 if [[ "$UID" -ne 0 ]]; then
   error_result "This script must be run as root!"
 fi
@@ -57,8 +57,38 @@ my_host_name="arch"
 my_user_id="roger"
 my_full_name="Roger Turowski"
 
+echo "List of disks available:"
+lsblk -d -e 11 -o name,size
+read -r -p "Disk to install to: " install_disk
 
-# To Do: Make a password hash here with mkpasswd and assign to my_password_hash at runtime
+if [ -e "/dev/$install_disk" ]; then
+    info_result "Disk $install_disk exists."
+else
+    error_result "Disk does not exist: $install_disk"
+fi
+
+read -r -p "Proceed with installation to $install_disk? [yes/no] " disk_confirmation
+case $disk_confirmation in
+    yes ) echo Proceeding...;;
+    no ) error_result "Cancelled by user.";;
+    * ) error_result "Unable to proceed due to an invalid response";;
+esac
+
+if [[ "$install_disk" =~ ^nvme[0-3]n[0-3]$ ]]; then
+  echo "Installing to nvme disk $install_disk"
+  my_disk="/dev/$install_disk"
+  my_partition_efi="/dev/${install_disk}p1"
+  my_partition_root="/dev/${install_disk}p2"
+elif [[ "$install_disk" =~ ^sd[a-z]$ ]]; then
+  echo "Installing to SATA disk $install_disk"
+  my_disk="/dev/$install_disk"
+  my_partition_efi="/dev/${install_disk}1"
+  my_partition_root="/dev/${install_disk}2"
+else
+  error_result "Invalid disk was selected: $install_disk"
+fi
+
+# Make a password hash here with mkpasswd and assign to my_password_hash at runtime
 echo "Create a password for $my_user_id"
 my_password_hash=$(mkpasswd -m sha-512)
 
@@ -198,28 +228,28 @@ reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --s
 pacman --noconfirm -Sy fastfetch git tree bat tldr tmux nano
 
 # Clear the disk
-sgdisk --zap-all --clear /dev/nvme0n1
+sgdisk --zap-all --clear "$my_disk"
 
 # PHYSICAL PARTITIONS
 
 # Create the physical EFI partition
-sgdisk --new=1:0:+4G --typecode=1:ef00 --change-name=1:EFI /dev/nvme0n1
+sgdisk --new=1:0:+4G --typecode=1:ef00 --change-name=1:EFI "$my_disk"
 
 # Create the physical partition for root, swap and home
-sgdisk --new=2:0:0 --typecode=2:8e00 --change-name=2:root /dev/nvme0n1
+sgdisk --new=2:0:0 --typecode=2:8e00 --change-name=2:root "$my_disk"
 
 # Display a disk summary
-partprobe -s /dev/nvme0n1
+partprobe -s "$my_disk"
 
 # PHYSICAL VOLUMES
 
 # Create a physical volume to contain the volume group "system"
-pvcreate /dev/nvme0n1p2
+pvcreate "$my_partition_root"
 
 # VOLUME GROUPS
 
 # Create the volume group for root, swap and home
-vgcreate system /dev/nvme0n1p2
+vgcreate system "$my_partition_root"
 
 # LOGICAL VOLUMES 
 
@@ -231,7 +261,7 @@ lvcreate -l 100%FREE -n home system
 # FORMAT THE PARTITIONS
 
 # Format the EFI partition
-mkfs.fat -n EFI -F32 /dev/nvme0n1p1
+mkfs.fat -n EFI -F32 "$my_partition_efi"
 
 # Format the root volume with BTRFS
 mkfs.btrfs -L root /dev/system/root
@@ -300,7 +330,7 @@ MOUNTOPTS=
 
 # Mount the EFI partition
 mkdir -p $my_root_mount/boot/efi
-mount /dev/nvme0n1p1 $my_root_mount/boot/efi
+mount "$my_partition_efi" "$my_root_mount/boot/efi"
 
 # Mount the home partition
 mkdir -p $my_root_mount/home
