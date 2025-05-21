@@ -98,7 +98,7 @@ echo "Create a password for $my_user_id"
 my_password_hash=$(mkpasswd -m sha-512)
 
 # The password hash will need the dollar sign characters escaped
-my_password_hash=${my_password_hash//\$/\\\$}
+#my_password_hash=${my_password_hash//\$/\\\$}
 
 # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
 pacstrap_pkgs=(
