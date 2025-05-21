@@ -59,7 +59,7 @@ my_full_name="Roger Turowski"
 
 command -v mkpasswd >/dev/null 2>&1 || {
    echo >&2 "Installing mkpasswd (part of the expect package.)";
-   pacman -S whois; 
+   pacman --noconfirm -S whois; 
 }
 
 echo "List of disks available:"
