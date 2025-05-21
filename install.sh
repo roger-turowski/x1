@@ -15,7 +15,7 @@
 
 # Error handling
 
-set -euo
+set -eu
 
 success_color="\e[1;32m"
 error_color="\e[1;31m"
@@ -57,8 +57,13 @@ my_host_name="arch"
 my_user_id="roger"
 my_full_name="Roger Turowski"
 
+command -v mkpasswd >/dev/null 2>&1 || {
+   echo >&2 "Installing mkpasswd (part of the expect package.)";
+   pacman -S whois; 
+}
+
 echo "List of disks available:"
-lsblk -d -e 11 -o name,size
+lsblk -d -e 11 -e 7 -o name,size
 read -r -p "Disk to install to: " install_disk
 
 if [ -e "/dev/$install_disk" ]; then
@@ -429,7 +434,7 @@ mkdir $my_root_mount/etc/sddm.conf.d/
 arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
 # Add some useful applications
-arch-chroot $my_root_mount pacman -S --noconfirm tree wireshark-qt ttf-0xproto-nerd ttf-cascadia-code-nerd ttf-cascadia-mono-nerd ttf-firacode-nerd ttf-hack-nerd ttf-jetbrains-mono-nerd ttf-sourcecodepro-nerd curl plocate btop htop fastfetch tmux tldr zellij git eza bat xrdp mc vifm tldr fzf
+arch-chroot $my_root_mount pacman -S --noconfirm tree wireshark-qt ttf-0xproto-nerd ttf-cascadia-code-nerd ttf-cascadia-mono-nerd ttf-firacode-nerd ttf-hack-nerd ttf-jetbrains-mono-nerd ttf-sourcecodepro-nerd curl plocate btop htop fastfetch tmux tldr zellij git eza bat mc vifm tldr fzf
 
 # Install snapper
 arch-chroot $my_root_mount pacman -S --noconfirm snapper snap-pac inotify-tools
