@@ -480,7 +480,7 @@ arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_u
 
 clear
 # Copy this script to the root home directory
-cp ~/install.sh $my_root_mount/root/Scripts
+cp install.sh $my_root_mount/root/Scripts
 
 echo -e "${success_color}Please set a password for the new root account:${no_color}"
 arch-chroot $my_root_mount passwd root
