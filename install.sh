@@ -148,12 +148,10 @@ gui_pkgs=(
   code
   cowsay
   cups
-  curl
-  dialog
+   dialog
   dnsmasq
   dnsutils
-  dosfstools
-  edk2-ovmf
+   edk2-ovmf
   efibootmgr
   eza
   fastfetch
@@ -161,7 +159,6 @@ gui_pkgs=(
   flatpak
   fzf
   gimp
-  grub
   gvfs
   gvfs-smb
   htop
@@ -176,7 +173,6 @@ gui_pkgs=(
   meld
   mtools
   network-manager-applet
-  networkmanager
   nfs-utils
   nmap
   nss-mdns
@@ -192,7 +188,6 @@ gui_pkgs=(
   scribus
   sof-firmware
   strawberry
-  tenacity-git
   terminus-font
   tldr
   tlp
@@ -215,8 +210,6 @@ gui_pkgs=(
   ttf-ubuntu-mono-nerd
   vde2
   vifm
-  virtualbox-bin
-  virtualbox-ext-oracle
   vlc
   whois
   wireshark-qt
