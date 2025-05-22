@@ -486,7 +486,28 @@ arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
   echo -e 'popd';
   echo -e 'yay -S brave-bin btrfs-assistant joplin-desktop plymouth ttf-ms-fonts';
 } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
+
+{ echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Keypunch
+  echo -e flatpak install -y --noninteractive flathub net.cozic.joplin_desktop
+  echo -e flatpak install -y --noninteractive flathub org.deluge_torrent.deluge
+  echo -e flatpak install -y --noninteractive flathub com.github.sixpounder.GameOfLife
+  echo -e flatpak install -y --noninteractive flathub io.github.giantpinkrobots.flatsweep
+  echo -e flatpak install -y --noninteractive flathub io.github.shiftey.Desktop
+  echo -e flatpak install -y --noninteractive flathub com.sweethome3d.Sweethome3d
+  echo -e flatpak install -y --noninteractive flathub org.kicad.KiCad
+  echo -e flatpak install -y --noninteractive flathub com.obsproject.Studio
+  echo -e flatpak install -y --noninteractive flathub com.github.artemanufrij.regextester
+  echo -e flatpak install -y --noninteractive flathub org.remmina.Remmina
+  echo -e flatpak install -y --noninteractive flathub org.stellarium.Stellarium
+  echo -e flatpak install -y --noninteractive flathub com.adrienplazas.Metronome
+  echo -e flatpak install -y --noninteractive flathub io.github.nokse22.inspector
+  echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Fretboard
+} >> $my_root_mount/home/$my_user_id/Scripts/install_flatpak_apps.sh
+
 arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
+
+# Create a directory for AppImages
+arch-chroot $my_root_mount mkdir /home/$my_user_id/AppImages/
 
 clear
 # Copy this script to the root home directory
