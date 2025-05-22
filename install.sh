@@ -57,8 +57,11 @@ my_host_name="arch"
 my_user_id="roger"
 my_full_name="Roger Turowski"
 
+# Enable color output for pacman and increase number of parallel downloads
+sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 8/' "/etc/pacman.conf"
+
 command -v mkpasswd >/dev/null 2>&1 || {
-   echo >&2 "Installing mkpasswd (part of the expect package.)";
+   echo >&2 "Installing mkpasswd (part of the whois package.)";
    pacman --noconfirm -S whois; 
 }
 
