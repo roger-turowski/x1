@@ -123,7 +123,7 @@ if (grep -m 1 "GenuineIntel" "/proc/cpuinfo"); then
   cpu_firmware="intel-ucode"
   ok_result "Intel CPU was found"
   pacstrap_pkgs+=("$cpu_firmware")
-elif (grep -m 1 "AuthenticAMD"); then
+elif (grep -m 1 "AuthenticAMD" "/proc/cpuinfo"); then
   cpu_firmware="amd-ucode"
   ok_result "AMD CPU was found"
   pacstrap_pkgs+=("$cpu_firmware")
