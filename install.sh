@@ -97,9 +97,6 @@ fi
 echo "Create a password for $my_user_id"
 my_password_hash=$(mkpasswd -m sha-512)
 
-# The password hash will need the dollar sign characters escaped
-#my_password_hash=${my_password_hash//\$/\\\$}
-
 # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
 pacstrap_pkgs=(
   base
@@ -137,6 +134,7 @@ gui_pkgs=(
   acpid
   alacritty
   alsa-utils
+  archlinux-wallpaper
   avahi
   base-devel
   bash-completion
@@ -144,7 +142,13 @@ gui_pkgs=(
   bluez
   bluez-utils
   bridge-utils
+  btop
+  calibre
+  cmatrix
+  code
+  cowsay
   cups
+  curl
   dialog
   dnsmasq
   dnsutils
@@ -156,21 +160,28 @@ gui_pkgs=(
   firewalld
   flatpak
   fzf
+  gimp
   grub
   gvfs
   gvfs-smb
+  htop
+  inkscape
   inetutils
   ipset
   kitty
+  libreoffice-fresh
   linux-headers
   lvm2
   mc
+  meld
   mtools
   network-manager-applet
   networkmanager
   nfs-utils
+  nmap
   nss-mdns
   ntfs-3g
+  nvim
   openbsd-netcat
   openssh
   os-prober
@@ -178,8 +189,12 @@ gui_pkgs=(
   pulseaudio
   reflector
   rsync
+  scribus
   sof-firmware
-  terminus-font 
+  strawberry
+  tenacity-git
+  terminus-font
+  tldr
   tlp
   tmux
   tree
@@ -200,10 +215,15 @@ gui_pkgs=(
   ttf-ubuntu-mono-nerd
   vde2
   vifm
+  virtualbox-bin
+  virtualbox-ext-oracle
+  vlc
   whois
+  wireshark-qt
   wpa_supplicant
   xdg-user-dirs
   xdg-utils
+  zellij
 )
 
 # Configure keyboard
@@ -433,9 +453,6 @@ arch-chroot $my_root_mount systemctl enable sddm
 mkdir $my_root_mount/etc/sddm.conf.d/
 arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
-# Add some useful applications
-arch-chroot $my_root_mount pacman -S --noconfirm tree wireshark-qt ttf-0xproto-nerd ttf-cascadia-code-nerd ttf-cascadia-mono-nerd ttf-firacode-nerd ttf-hack-nerd ttf-jetbrains-mono-nerd ttf-sourcecodepro-nerd curl plocate btop htop fastfetch tmux tldr zellij git eza bat mc vifm tldr fzf
-
 # Install snapper
 arch-chroot $my_root_mount pacman -S --noconfirm snapper snap-pac inotify-tools
 #arch-chroot $my_root_mount btrfs subvolume delete /.snapshots/
@@ -474,7 +491,7 @@ arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
   echo -e 'pushd yay';
   echo -e 'makepkg -si';
   echo -e 'popd';
-  echo -e 'yay -S brave-bin btrfs-assistant ttf-ms-fonts';
+  echo -e 'yay -S brave-bin btrfs-assistant joplin-desktop plymouth ttf-ms-fonts';
 } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
 arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
