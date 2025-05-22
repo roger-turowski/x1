@@ -484,9 +484,11 @@ arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
   echo -e 'pushd yay';
   echo -e 'makepkg -si';
   echo -e 'popd';
-  echo -e 'yay -S brave-bin btrfs-assistant joplin-desktop plymouth ttf-ms-fonts';
+  echo -e 'yay -S brave-bin btrfs-assistant plymouth ttf-ms-fonts';
 } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
 
+arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/install_flatpak_apps.sh
+arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/install_flatpak_apps.sh
 { echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Keypunch
   echo -e flatpak install -y --noninteractive flathub net.cozic.joplin_desktop
   echo -e flatpak install -y --noninteractive flathub org.deluge_torrent.deluge
