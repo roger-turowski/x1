@@ -398,6 +398,9 @@ echo -e $my_host_name >> $my_root_mount/etc/hostname
 # Set a password for root
 # arch-chroot $my_root_mount echo root:change-me | chpasswd
 
+# Enable color output for pacman and increase number of parallel downloads
+arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 8/' "/etc/pacman.conf"
+
 # Install the rest of the system packages
 arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
 
