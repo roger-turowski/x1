@@ -24,10 +24,10 @@ info_color="\e[1;34m"
 no_color="\e[0m"
 
 error_result() {
-	# [     OK     ]
-  # [   ERROR    ]
-  # [  WARNING   ]
-  # [    INFO    ]
+	# [   OK   ]
+  # [  ERR   ]
+  # [  WARN  ]
+  # [  INF   ]
   echo -e "[   ${error_color}ERR$${no_color}    ] $1"
 	exit 1
 }
@@ -151,10 +151,10 @@ gui_pkgs=(
   code
   cowsay
   cups
-   dialog
+  dialog
   dnsmasq
   dnsutils
-   edk2-ovmf
+  edk2-ovmf
   efibootmgr
   eza
   fastfetch
@@ -220,6 +220,8 @@ gui_pkgs=(
   xdg-user-dirs
   xdg-utils
   zellij
+  zsh
+  zsh-completions
 )
 
 # Configure keyboard
