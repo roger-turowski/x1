@@ -8,10 +8,11 @@
 
 # Virtualbox Guest Notes
 # ======================
+# Create a disk image at least 128GB in size.
 # Enable EFI.
 # Assign a VBoxSVGA video adapter to use Wayland, else a black screen will appear.
 # Use a Bridged network adapter so ssh can be used for installation and troubleshooting.
-# Set a root password to enable connecting via ssh
+# Set a root password immediately to enable connecting via ssh
 
 # Error handling
 
@@ -116,6 +117,8 @@ pacstrap_pkgs=(
   sudo
   util-linux
   vim
+  zsh
+  zsh-completions
 )
 
 # Detect the CPU type to install appropriate firmware
@@ -220,8 +223,6 @@ gui_pkgs=(
   xdg-user-dirs
   xdg-utils
   zellij
-  zsh
-  zsh-completions
 )
 
 # Configure keyboard
@@ -442,7 +443,7 @@ arch-chroot $my_root_mount sed -i \
 arch-chroot $my_root_mount mkinitcpio -p linux
 
 # Add a user account
-arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -p "$my_password_hash" $my_user_id
+arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s /usr/bin/zsh -p "$my_password_hash" $my_user_id
 
 # ToDo: Clean this section up
 # Install KDE Plasma and sddm
@@ -492,8 +493,12 @@ arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
   echo -e 'pushd yay';
   echo -e 'makepkg -si';
   echo -e 'popd';
-  echo -e 'yay -S brave-bin btrfs-assistant plymouth ttf-ms-fonts';
+  echo -e 'yay -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
 } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
+
+# Enable oh-my-posh in zsh
+arch-chroot $my_root_mount echo "\neval \"\$(oh-my-posh init zsh)\"" >> /home/$my_user_id/.zshrc;
+arch-chroot $my_root_mount chown $my_user_id:$my_user_id /home/$my_user_id/.zshrc
 
 arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/install_flatpak_apps.sh
 arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/install_flatpak_apps.sh
