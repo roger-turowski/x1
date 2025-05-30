@@ -139,14 +139,14 @@ if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
   #my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -d " " -f 2)
   my_hypervisor_product=$(dmidecode -t system | grep 'Product' | cut -d " " -f 2)
   case "$my_hypervisor_product" in
-   "VirtualBox")
-     echo "Running on VirtualBox"
-     pacstrap_pkgs+=("virtualbox-guest-utils")
-   ;;
-   *)
-     echo "Running on unknown hypervisor product" 
-   ;;
-esac
+    "VirtualBox")
+      echo "Running on VirtualBox"
+      pacstrap_pkgs+=("virtualbox-guest-utils")
+      ;;
+    *)
+      echo "Running on unknown hypervisor product" 
+      ;;
+  esac
 fi
 
 gui_pkgs=(
