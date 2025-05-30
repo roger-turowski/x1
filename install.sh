@@ -508,11 +508,11 @@ arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
   echo -e 'pushd yay';
   echo -e 'makepkg -si';
   echo -e 'popd';
-  echo -e 'yay -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
+  echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
 } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
 
 # Enable oh-my-posh in zsh
-arch-chroot $my_root_mount echo "\neval \"\$(oh-my-posh init zsh)\"" >> /home/$my_user_id/.zshrc;
+echo "\neval \"\$(oh-my-posh init zsh)\"" >> "$my_root_mount/home/$my_user_id/.zshrc";
 arch-chroot $my_root_mount chown $my_user_id:$my_user_id /home/$my_user_id/.zshrc
 
 arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/install_flatpak_apps.sh
