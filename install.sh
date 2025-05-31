@@ -136,16 +136,27 @@ fi
 
 # Detect if running on a hypervisor and install the correct additions
 if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
-  #my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -d " " -f 2)
+  my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -d " " -f 2)
   my_hypervisor_product=$(dmidecode -t system | grep 'Product' | cut -d " " -f 3)
   case "$my_hypervisor_product" in
     "VirtualBox")
       echo "Running on VirtualBox"
       pacstrap_pkgs+=("virtualbox-guest-utils")
       ;;
-    *)
-      echo "Running on unknown hypervisor product" 
+    "VMware Virtual Platform")
+      echo "Running on VMware"
+      pacstrap+=("open-vm-tools")
       ;;
+    *)
+      case "$my_hypervisor_manufacturer" in
+        "QEMU")
+          echo "Running on QEMU"
+          pacstrap_pkgs+=("qemu-guest-agent")
+          ;;
+        *)
+          echo "Running on unknown hypervisor"
+          ;;
+      esac
   esac
 fi
 
