@@ -512,7 +512,7 @@ arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
 } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
 
 # Enable oh-my-posh in zsh
-echo "\neval \"\$(oh-my-posh init zsh)\"" >> "$my_root_mount/home/$my_user_id/.zshrc";
+echo -e "\neval \"\$(oh-my-posh init zsh)\"" >> "$my_root_mount/home/$my_user_id/.zshrc";
 arch-chroot $my_root_mount chown $my_user_id:$my_user_id /home/$my_user_id/.zshrc
 
 arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/install_flatpak_apps.sh
