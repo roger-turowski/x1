@@ -304,8 +304,8 @@ vgcreate system "$my_partition_root"
 # LOGICAL VOLUMES 
 
 # Create the logical volumes for root, swap and home
-lvcreate -l 30%FREE -n root system
-lvcreate -L 2G -n swap system
+lvcreate -l 40%FREE -n root system
+lvcreate -L 8G -n swap system
 lvcreate -l 100%FREE -n home system
 
 # FORMAT THE PARTITIONS
