@@ -59,7 +59,7 @@ my_user_id="roger"
 my_full_name="Roger Turowski"
 
 # Enable color output for pacman and increase number of parallel downloads
-sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 8/' "/etc/pacman.conf"
+sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 5/' "/etc/pacman.conf"
 
 command -v mkpasswd >/dev/null 2>&1 || {
    echo >&2 "Installing mkpasswd (part of the whois package.)";
@@ -278,7 +278,13 @@ reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --s
 pacman --noconfirm -Sy fastfetch git tree bat tldr tmux nano
 
 # Clear the disk
-sgdisk --zap-all --clear "$my_disk"
+sgdisk --zap-all "$my_disk"
+
+# Clean the ssd disk using blkdiscard
+blkdiscard "$my_disk"
+
+# Inform the OS of partition table changes
+partprobe "$my_disk"
 
 # PHYSICAL PARTITIONS
 
