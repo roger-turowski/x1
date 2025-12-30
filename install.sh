@@ -52,6 +52,9 @@ if [[ "$UID" -ne 0 ]]; then
 fi
 
 # Initialize variables
+unset my_password_hash
+unset my_password_hash_confirmed
+unset my_salt
 my_timezone="US/Michigan"
 my_root_mount="/mnt"
 my_host_name="arch"
@@ -98,8 +101,23 @@ else
 fi
 
 # Make a password hash here with mkpasswd and assign to my_password_hash at runtime
+# Generate a salt for the password hash
+my_salt=$(tr -dc '0-9a-zA-Z' < /dev/urandom | head -c 16)
+
 echo "Create a password for $my_user_id"
-my_password_hash=$(mkpasswd -m sha-512)
+my_password_hash=$(mkpasswd -m sha-512 --salt=$my_salt)
+
+echo "Enter the password again to confirm"
+my_password_hash_confirmed=$(mkpasswd -m sha-512 --salt=$my_salt)
+
+case $my_password_hash in
+	"$my_password_hash_confirmed")
+		ok_result "Password confirmed"
+		;;
+	*)
+		error_result "Password not confirmed"
+		;;
+esac
 
 # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
 pacstrap_pkgs=(
