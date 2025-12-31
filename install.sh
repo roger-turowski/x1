@@ -28,8 +28,8 @@ error_result() {
 	# [   OK   ]
   # [  ERR   ]
   # [  WARN  ]
-  # [  INF   ]
-  echo -e "[   ${error_color}ERR$${no_color}    ] $1"
+  # [  INFO  ]
+  echo -e "[   ${error_color}ERR${no_color}    ] $1"
 	exit 1
 }
 
@@ -43,7 +43,7 @@ warning_result() {
 }
 
 info_result() {
-	echo -e "[    ${info_color}INFO${no_color}   ] $1"
+	echo -e "[   ${info_color}INFO${no_color}   ] $1"
 }
 
 # Ensure the script is being run by root
@@ -119,6 +119,7 @@ case $my_password_hash in
 		;;
 esac
 
+
 # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
 pacstrap_pkgs=(
   base
@@ -154,8 +155,11 @@ fi
 
 # Detect if running on a hypervisor and install the correct additions
 if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
-  my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -d " " -f 2)
-  my_hypervisor_product=$(dmidecode -t system | grep 'Product' | cut -d " " -f 3)
+  info_result "Hypervisor is detected"
+  my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -c 16-)
+  my_hypervisor_product=$(dmidecode -t system | grep 'Product' | cut -c 16-)
+  info_result "Hypervisor Manufacturer is: $my_hypervisor_manufacturer"
+  info_result "Hypervisor Product is: $my_hypervisor_product"
   case "$my_hypervisor_product" in
     "VirtualBox")
       echo "Running on VirtualBox"
@@ -167,6 +171,10 @@ if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
       ;;
     *)
       case "$my_hypervisor_manufacturer" in
+        "VMware, Inc.")
+          echo "Running on VMware"
+          pacstrap+=("open-vm-tools")
+          ;;
         "QEMU")
           echo "Running on QEMU"
           pacstrap_pkgs+=("qemu-guest-agent")
@@ -177,6 +185,8 @@ if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
       esac
   esac
 fi
+
+error_result "Exiting script for test purposes."
 
 gui_pkgs=(
   acpi
@@ -239,10 +249,8 @@ gui_pkgs=(
   sof-firmware
   strawberry
   terminus-font
-  tldr
   tlp
   tmux
-  tree
   ttf-0xproto-nerd
   ttf-cascadia-code-nerd
   ttf-cascadia-mono-nerd
