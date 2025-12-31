@@ -164,13 +164,13 @@ if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
       ;;
     "VMware Virtual Platform")
       echo "Running on VMware"
-      pacstrap+=("open-vm-tools")
+      pacstrap_pkgs+=("open-vm-tools")
       ;;
     *)
       case "$my_hypervisor_manufacturer" in
         "VMware, Inc.")
           echo "Running on VMware"
-          pacstrap+=("open-vm-tools")
+          pacstrap_pkgs+=("open-vm-tools")
           ;;
         "QEMU")
           echo "Running on QEMU"
@@ -299,7 +299,8 @@ pacman --noconfirm -Sy fastfetch git tree bat tldr tmux nano
 sgdisk --zap-all "$my_disk"
 
 # Clean the ssd disk using blkdiscard
-blkdiscard "$my_disk"
+# Found blkdiscard fails on VMware guest disks
+#blkdiscard "$my_disk"
 
 # Inform the OS of partition table changes
 partprobe "$my_disk"
