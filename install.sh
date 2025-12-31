@@ -34,7 +34,7 @@ error_result() {
 }
 
 ok_result() {
-	echo -e "[     ${success_color}OK${no_color}     ] $1"
+	echo -e "[    ${success_color}OK${no_color}    ] $1"
 }
 
 warning_result() {
@@ -52,21 +52,18 @@ if [[ "$UID" -ne 0 ]]; then
 fi
 
 # Initialize variables
-unset my_password_hash
-unset my_password_hash_confirmed
-unset my_salt
 my_timezone="US/Michigan"
 my_root_mount="/mnt"
 my_host_name="arch"
 my_user_id="roger"
 my_full_name="Roger Turowski"
 
-# Enable color output for pacman and increase number of parallel downloads
-sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 5/' "/etc/pacman.conf"
+# Enable color output for pacman and specify the number of parallel downloads
+sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 4/' "/etc/pacman.conf"
 
 command -v mkpasswd >/dev/null 2>&1 || {
-   echo >&2 "Installing mkpasswd (part of the whois package.)";
-   pacman --noconfirm -S whois; 
+  echo >&2 "Installing mkpasswd (part of the whois package.)";
+  pacman --noconfirm -S whois; 
 }
 
 echo "List of disks available:"
@@ -74,16 +71,16 @@ lsblk -d -e 11 -e 7 -o name,size
 read -r -p "Disk to install to: " install_disk
 
 if [ -e "/dev/$install_disk" ]; then
-    info_result "Disk $install_disk exists."
+  info_result "Disk $install_disk exists."
 else
-    error_result "Disk does not exist: $install_disk"
+  error_result "Disk does not exist: $install_disk"
 fi
 
 read -r -p "Proceed with installation to $install_disk? [yes/no] " disk_confirmation
 case $disk_confirmation in
-    yes ) echo Proceeding...;;
-    no ) error_result "Cancelled by user.";;
-    * ) error_result "Unable to proceed due to an invalid response";;
+  yes ) echo Proceeding...;;
+  no ) error_result "Cancelled by user to preserve the current disk layout.";;
+  * ) error_result "Unable to proceed due to an invalid response";;
 esac
 
 if [[ "$install_disk" =~ ^nvme[0-3]n[0-3]$ ]]; then
@@ -105,10 +102,10 @@ fi
 my_salt=$(tr -dc '0-9a-zA-Z' < /dev/urandom | head -c 16)
 
 echo "Create a password for $my_user_id"
-my_password_hash=$(mkpasswd -m sha-512 --salt=$my_salt)
+my_password_hash=$(mkpasswd -m sha-512 --salt="$my_salt")
 
 echo "Enter the password again to confirm"
-my_password_hash_confirmed=$(mkpasswd -m sha-512 --salt=$my_salt)
+my_password_hash_confirmed=$(mkpasswd -m sha-512 --salt="$my_salt")
 
 case $my_password_hash in
 	"$my_password_hash_confirmed")
@@ -185,8 +182,6 @@ if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
       esac
   esac
 fi
-
-error_result "Exiting script for test purposes."
 
 gui_pkgs=(
   acpi
@@ -280,15 +275,12 @@ gui_pkgs=(
 # Configure keyboard
 localectl set-keymap us
 
-# Set-up Wi-Fi connection example
+# Set-up Wi-Fi connection example:
 # iwctl adapter list
 # iwctl station wlan0 get-networks
 # iwbtl station wlan0 connect <network_name>
 # ip a
 # ping -c 4 archlinux.org
-
-# Set a password so we can connect via ssh
-# passwd
 
 # Set the time zone
 timedatectl set-timezone $my_timezone
@@ -459,7 +451,7 @@ echo -e $my_host_name >> $my_root_mount/etc/hostname
 # Set a password for root
 # arch-chroot $my_root_mount echo root:change-me | chpasswd
 
-# Enable color output for pacman and increase number of parallel downloads
+# Enable color output for pacman and specify the number of parallel downloads
 arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 8/' "/etc/pacman.conf"
 
 # Install the rest of the system packages
@@ -476,15 +468,15 @@ arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
 # ToDo: Optimize this section
 # Enable Services
 arch-chroot $my_root_mount systemctl enable NetworkManager \
-    bluetooth \
-    cups.service \
-    sshd \
-    avahi-daemon \
-    tlp \
-    reflector.timer \
-    fstrim.timer \
-    firewalld \
-    acpid \
+  bluetooth \
+  cups.service \
+  sshd \
+  avahi-daemon \
+  tlp \
+  reflector.timer \
+  fstrim.timer \
+  firewalld \
+  acpid \
 
 # Make wheel group sudo enabled
 SUDOER_TMP=$(mktemp)
@@ -495,9 +487,9 @@ rm "$SUDOER_TMP"
 
 # Update mkinitcpio.conf
 arch-chroot $my_root_mount sed -i \
-    -e 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf \
-    -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs/' \
-    /etc/mkinitcpio.conf
+  -e 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf \
+  -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs/' \
+  /etc/mkinitcpio.conf
 arch-chroot $my_root_mount mkinitcpio -p linux
 
 # Add a user account
