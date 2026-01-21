@@ -5,6 +5,31 @@
 # General Notes
 # =============
 # This build script currently only supports UEFI systems
+# The script creates a BTRFS root partition with multiple subvolumes
+# A separate home partition is created using ext4
+# Snapper is installed but not enabled by default. A post-install script is created to enable it.
+# The script creates a user account and a post-install script to install yay and AUR packages.
+# The script creates a post-install script to install Flatpak applications.
+# The script installs KDE Plasma as the desktop environment with SDDM as the display manager.
+# The script detects if running on a hypervisor and installs the appropriate guest additions.
+# The script detects Intel and AMD CPUs and installs the appropriate micro-code firmware.
+
+# To-do:
+# - Add logging of all commands to evaluate after installation
+# - Add network configuration steps (Wi-Fi, static IP, etc.)
+# - Add CPU micro-code installation for ARM CPUs
+# - Add graphics driver installation based on detected GPU
+# - Add option to select desktop environment during installation
+# - Add LUKS encryption support
+# - Clean-up and optimize the script
+# - Add more comments to explain each section
+# - Add error handling for each major step
+# - Test on real hardware and different VM platforms
+# - Add support for other desktop environments
+# - Add support for different filesystems (XFS, ext4, etc.) 
+# - Add support for different partition schemes (MBR, etc.)
+
+
 
 # Virtualbox Guest Notes
 # ======================
