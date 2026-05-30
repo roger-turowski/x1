@@ -5,6 +5,31 @@
 # General Notes
 # =============
 # This build script currently only supports UEFI systems
+# The script creates a BTRFS root partition with multiple subvolumes
+# A separate home partition is created using ext4
+# Snapper is installed but not enabled by default. A post-install script is created to enable it.
+# The script creates a user account and a post-install script to install yay and AUR packages.
+# The script creates a post-install script to install Flatpak applications.
+# The script installs KDE Plasma as the desktop environment with SDDM as the display manager.
+# The script detects if running on a hypervisor and installs the appropriate guest additions.
+# The script detects Intel and AMD CPUs and installs the appropriate micro-code firmware.
+
+# To-do:
+# - Add logging of all commands to evaluate after installation
+# - Add network configuration steps (Wi-Fi, static IP, etc.)
+# - Add CPU micro-code installation for ARM CPUs
+# - Add graphics driver installation based on detected GPU
+# - Add option to select desktop environment during installation
+# - Add LUKS encryption support
+# - Clean-up and optimize the script
+# - Add more comments to explain each section
+# - Add error handling for each major step
+# - Test on real hardware and different VM platforms
+# - Add support for other desktop environments
+# - Add support for different filesystems (XFS, ext4, etc.) 
+# - Add support for different partition schemes (MBR, etc.)
+
+
 
 # Virtualbox Guest Notes
 # ======================
@@ -28,13 +53,13 @@ error_result() {
 	# [   OK   ]
   # [  ERR   ]
   # [  WARN  ]
-  # [  INF   ]
-  echo -e "[   ${error_color}ERR$${no_color}    ] $1"
+  # [  INFO  ]
+  echo -e "[   ${error_color}ERR${no_color}    ] $1"
 	exit 1
 }
 
 ok_result() {
-	echo -e "[     ${success_color}OK${no_color}     ] $1"
+	echo -e "[    ${success_color}OK${no_color}    ] $1"
 }
 
 warning_result() {
@@ -43,7 +68,7 @@ warning_result() {
 }
 
 info_result() {
-	echo -e "[    ${info_color}INFO${no_color}   ] $1"
+	echo -e "[   ${info_color}INFO${no_color}   ] $1"
 }
 
 # Ensure the script is being run by root
@@ -58,12 +83,12 @@ my_host_name="arch"
 my_user_id="roger"
 my_full_name="Roger Turowski"
 
-# Enable color output for pacman and increase number of parallel downloads
-sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 8/' "/etc/pacman.conf"
+# Enable color output for pacman and specify the number of parallel downloads
+sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 4/' "/etc/pacman.conf"
 
 command -v mkpasswd >/dev/null 2>&1 || {
-   echo >&2 "Installing mkpasswd (part of the whois package.)";
-   pacman --noconfirm -S whois; 
+  echo >&2 "Installing mkpasswd (part of the whois package.)";
+  pacman --noconfirm -S whois; 
 }
 
 echo "List of disks available:"
@@ -71,16 +96,16 @@ lsblk -d -e 11 -e 7 -o name,size
 read -r -p "Disk to install to: " install_disk
 
 if [ -e "/dev/$install_disk" ]; then
-    info_result "Disk $install_disk exists."
+  info_result "Disk $install_disk exists."
 else
-    error_result "Disk does not exist: $install_disk"
+  error_result "Disk does not exist: $install_disk"
 fi
 
 read -r -p "Proceed with installation to $install_disk? [yes/no] " disk_confirmation
 case $disk_confirmation in
-    yes ) echo Proceeding...;;
-    no ) error_result "Cancelled by user.";;
-    * ) error_result "Unable to proceed due to an invalid response";;
+  yes ) echo Proceeding...;;
+  no ) error_result "Cancelled by user to preserve the current disk layout.";;
+  * ) error_result "Unable to proceed due to an invalid response";;
 esac
 
 if [[ "$install_disk" =~ ^nvme[0-3]n[0-3]$ ]]; then
@@ -98,8 +123,24 @@ else
 fi
 
 # Make a password hash here with mkpasswd and assign to my_password_hash at runtime
+# Generate a salt for the password hash
+my_salt=$(tr -dc '0-9a-zA-Z' < /dev/urandom | head -c 16)
+
 echo "Create a password for $my_user_id"
-my_password_hash=$(mkpasswd -m sha-512)
+my_password_hash=$(mkpasswd -m sha-512 --salt="$my_salt")
+
+echo "Enter the password again to confirm"
+my_password_hash_confirmed=$(mkpasswd -m sha-512 --salt="$my_salt")
+
+case $my_password_hash in
+	"$my_password_hash_confirmed")
+		ok_result "Password confirmed"
+		;;
+	*)
+		error_result "Password not confirmed"
+		;;
+esac
+
 
 # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
 pacstrap_pkgs=(
@@ -136,8 +177,11 @@ fi
 
 # Detect if running on a hypervisor and install the correct additions
 if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
-  my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -d " " -f 2)
-  my_hypervisor_product=$(dmidecode -t system | grep 'Product' | cut -d " " -f 3)
+  info_result "Hypervisor is detected"
+  my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -c 16-)
+  my_hypervisor_product=$(dmidecode -t system | grep 'Product' | cut -c 16-)
+  info_result "Hypervisor Manufacturer is: $my_hypervisor_manufacturer"
+  info_result "Hypervisor Product is: $my_hypervisor_product"
   case "$my_hypervisor_product" in
     "VirtualBox")
       echo "Running on VirtualBox"
@@ -145,10 +189,14 @@ if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
       ;;
     "VMware Virtual Platform")
       echo "Running on VMware"
-      pacstrap+=("open-vm-tools")
+      pacstrap_pkgs+=("open-vm-tools")
       ;;
     *)
       case "$my_hypervisor_manufacturer" in
+        "VMware, Inc.")
+          echo "Running on VMware"
+          pacstrap_pkgs+=("open-vm-tools")
+          ;;
         "QEMU")
           echo "Running on QEMU"
           pacstrap_pkgs+=("qemu-guest-agent")
@@ -220,10 +268,8 @@ gui_pkgs=(
   sof-firmware
   strawberry
   terminus-font
-  tldr
   tlp
   tmux
-  tree
   ttf-0xproto-nerd
   ttf-cascadia-code-nerd
   ttf-cascadia-mono-nerd
@@ -253,15 +299,12 @@ gui_pkgs=(
 # Configure keyboard
 localectl set-keymap us
 
-# Set-up Wi-Fi connection example
+# Set-up Wi-Fi connection example:
 # iwctl adapter list
 # iwctl station wlan0 get-networks
 # iwbtl station wlan0 connect <network_name>
 # ip a
 # ping -c 4 archlinux.org
-
-# Set a password so we can connect via ssh
-# passwd
 
 # Set the time zone
 timedatectl set-timezone $my_timezone
@@ -277,7 +320,14 @@ reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --s
 pacman --noconfirm -Sy fastfetch git tree bat tldr tmux nano
 
 # Clear the disk
-sgdisk --zap-all --clear "$my_disk"
+sgdisk --zap-all "$my_disk"
+
+# Clean the ssd disk using blkdiscard
+# Found blkdiscard fails on VMware guest disks
+#blkdiscard "$my_disk"
+
+# Inform the OS of partition table changes
+partprobe "$my_disk"
 
 # PHYSICAL PARTITIONS
 
@@ -303,8 +353,8 @@ vgcreate system "$my_partition_root"
 # LOGICAL VOLUMES 
 
 # Create the logical volumes for root, swap and home
-lvcreate -l 30%FREE -n root system
-lvcreate -L 2G -n swap system
+lvcreate -l 40%FREE -n root system
+lvcreate -L 8G -n swap system
 lvcreate -l 100%FREE -n home system
 
 # FORMAT THE PARTITIONS
@@ -426,8 +476,8 @@ echo -e $my_host_name >> $my_root_mount/etc/hostname
 # Set a password for root
 # arch-chroot $my_root_mount echo root:change-me | chpasswd
 
-# Enable color output for pacman and increase number of parallel downloads
-arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 8/' "/etc/pacman.conf"
+# Enable color output for pacman and specify the number of parallel downloads
+arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 4/' "/etc/pacman.conf"
 
 # Install the rest of the system packages
 arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
@@ -443,15 +493,15 @@ arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
 # ToDo: Optimize this section
 # Enable Services
 arch-chroot $my_root_mount systemctl enable NetworkManager \
-    bluetooth \
-    cups.service \
-    sshd \
-    avahi-daemon \
-    tlp \
-    reflector.timer \
-    fstrim.timer \
-    firewalld \
-    acpid \
+  bluetooth \
+  cups.service \
+  sshd \
+  avahi-daemon \
+  tlp \
+  reflector.timer \
+  fstrim.timer \
+  firewalld \
+  acpid \
 
 # Make wheel group sudo enabled
 SUDOER_TMP=$(mktemp)
@@ -462,9 +512,9 @@ rm "$SUDOER_TMP"
 
 # Update mkinitcpio.conf
 arch-chroot $my_root_mount sed -i \
-    -e 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf \
-    -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs/' \
-    /etc/mkinitcpio.conf
+  -e 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf \
+  -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs/' \
+  /etc/mkinitcpio.conf
 arch-chroot $my_root_mount mkinitcpio -p linux
 
 # Add a user account
