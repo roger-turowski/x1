@@ -173,7 +173,6 @@ gui_pkgs=(
   bat
   bluez
   bluez-utils
-  bridge-utils
   btop
   calibre
   cmatrix
