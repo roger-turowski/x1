@@ -6,7 +6,7 @@
 # =============
 # This build script currently only supports UEFI systems
 # The script creates a BTRFS root partition with multiple subvolumes
-# A separate home partition is created using ext4
+# A separate home partition is created using xfs
 # Snapper is installed but not enabled by default. A post-install script is created to enable it.
 # The script creates a user account and a post-install script to install yay and AUR packages.
 # The script creates a post-install script to install Flatpak applications.
@@ -365,8 +365,8 @@ mkfs.fat -n EFI -F32 "$my_partition_efi"
 # Format the root volume with BTRFS
 mkfs.btrfs -L root /dev/system/root
 
-# Format the home volume with ext4
-mkfs.ext4 -L home /dev/system/home
+# Format the home volume with xfs
+mkfs.xfs -L home /dev/system/home
 
 # Create swap space
 mkswap -L swap /dev/system/swap
