@@ -450,7 +450,7 @@ arch-chroot $my_root_mount ln -sf /usr/share/zoneinfo/America/Detroit /etc/local
 arch-chroot $my_root_mount hwclock --systohc
 
 # Generate the locale
-arch-chroot $my_root_mount sed -i '171s/.//' /etc/locale.gen
+arch-chroot $my_root_mount sed -i '/^en_US.UTF-8 UTF-8/s/^#//' /etc/locale.gen
 arch-chroot $my_root_mount locale-gen
 echo "LANG=en_US.UTF-8" >> $my_root_mount/etc/locale.conf
 
