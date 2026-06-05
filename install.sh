@@ -213,6 +213,7 @@ gui_pkgs=(
   acpi_call
   acpid
   alacritty
+  alsa-firmware
   alsa-utils
   archlinux-wallpaper
   avahi
@@ -450,7 +451,7 @@ arch-chroot $my_root_mount ln -sf /usr/share/zoneinfo/America/Detroit /etc/local
 arch-chroot $my_root_mount hwclock --systohc
 
 # Generate the locale
-arch-chroot $my_root_mount sed -i '/^en_US.UTF-8 UTF-8/s/^#//' /etc/locale.gen
+arch-chroot $my_root_mount sed -i '/^#en_US.UTF-8 UTF-8/s/^#//' /etc/locale.gen
 arch-chroot $my_root_mount locale-gen
 echo "LANG=en_US.UTF-8" >> $my_root_mount/etc/locale.conf
 
@@ -605,6 +606,8 @@ cp install.sh $my_root_mount/root/Scripts
 
 echo -e "${success_color}Please set a password for the new root account:${no_color}"
 arch-chroot $my_root_mount passwd root
-echo Script finished! Please unmount all and reboot.
 
 sync
+umount $my_root_mount
+
+echo Script finished! Please reboot.
