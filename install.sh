@@ -321,12 +321,12 @@ reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --s
 pacman --noconfirm -Sy fastfetch git tree bat tldr tmux nano
 
 # Clear the disk
-# sgdisk --zap-all "$my_disk"
+ sgdisk --zap-all "$my_disk"
 wipefs --all --force "$my_disk"
 
 # Clean the ssd disk using blkdiscard
 # Found blkdiscard fails on VMware guest disks
-#blkdiscard "$my_disk"
+blkdiscard "$my_disk"
 
 # Inform the OS of partition table changes
 partprobe "$my_disk"
