@@ -338,8 +338,8 @@ sgdisk --zap-all "$my_disk"
 
 # 3. Force the kernel to drop the device and re-scan
 # This simulates unplugging/replugging the drive without rebooting
-#echo 1 > /sys/block/sda/device/delete
-#echo "- - -" > /sys/class/scsi_host/host0/scan 
+echo 1 > /sys/block/sda/device/delete
+echo "- - -" > /sys/class/scsi_host/host0/scan 
 # NOTE: Replace 'host0' with your actual host number found via: ls /sys/class/scsi_host/
 
 # Clean the ssd disk using blkdiscard
