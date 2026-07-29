@@ -344,7 +344,7 @@ partprobe -s "$my_disk"
 # PHYSICAL VOLUMES
 
 # Create a physical volume to contain the volume group "system"
-pvcreate "$my_partition_root"
+pvcreate -ff "$my_partition_root"
 
 # VOLUME GROUPS
 
