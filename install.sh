@@ -321,12 +321,30 @@ reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --s
 pacman --noconfirm -Sy fastfetch git tree bat tldr tmux nano
 
 # Clear the disk
- sgdisk --zap-all "$my_disk"
+# Deactivate ALL volume groups
+vgchange -an
+
+# Removes all active device mapper devices
+dmsetup remove_all
+
+# Stop RAID arrays (if any)
+mdadm --stop --scan
+
+# 1. Aggressively wipe all signatures (filesystem, raid, partition table)
 wipefs --all --force "$my_disk"
+
+# 2. Destroy GPT headers (Primary AND Backup) explicitly
+sgdisk --zap-all "$my_disk"
+
+# 3. Force the kernel to drop the device and re-scan
+# This simulates unplugging/replugging the drive without rebooting
+#echo 1 > /sys/block/sda/device/delete
+#echo "- - -" > /sys/class/scsi_host/host0/scan 
+# NOTE: Replace 'host0' with your actual host number found via: ls /sys/class/scsi_host/
 
 # Clean the ssd disk using blkdiscard
 # Found blkdiscard fails on VMware guest disks
-blkdiscard "$my_disk"
+#blkdiscard "$my_disk"
 
 # Inform the OS of partition table changes
 partprobe "$my_disk"
