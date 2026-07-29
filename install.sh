@@ -145,19 +145,46 @@ esac
 # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
 pacstrap_pkgs=(
   base
+  base-devel
+  bash-completion
+  bat
+  btop
   btrfs-progs
+  cmatrix
+  cowsay
   cryptsetup
+  dnsmasq
   dosfstools
   e2fsprogs
+  eza
+  fastfetch
+  fzf
   git
   grub-btrfs
+  htop
+  inetutils
+  ipset
   linux
   linux-firmware
+  linux-headers
+  mc
   nano
   networkmanager
+  nmap
+  nvim
+  openbsd-netcat
+  openssh
+  os-prober
+  plocate
+  reflector
+  rsync
   sudo
+  tmux
   util-linux
+  vifm
   vim
+  whois
+  zellij
   zsh
   zsh-completions
 )
@@ -217,60 +244,36 @@ gui_pkgs=(
   alsa-utils
   archlinux-wallpaper
   avahi
-  base-devel
-  bash-completion
-  bat
   bluez
   bluez-utils
-  btop
   calibre
-  cmatrix
   code
-  cowsay
   cups
   dialog
-  dnsmasq
   dnsutils
   edk2-ovmf
   efibootmgr
-  eza
-  fastfetch
   firewalld
   flatpak
-  fzf
   gimp
   gvfs
   gvfs-smb
-  htop
   inkscape
-  inetutils
-  ipset
   kitty
   libreoffice-fresh
-  linux-headers
   lvm2
-  mc
   meld
   mtools
   network-manager-applet
   nfs-utils
-  nmap
   nss-mdns
   ntfs-3g
-  nvim
-  openbsd-netcat
-  openssh
-  os-prober
-  plocate
   pulseaudio
-  reflector
-  rsync
   scribus
   sof-firmware
   strawberry
   terminus-font
   tlp
-  tmux
   ttf-0xproto-nerd
   ttf-cascadia-code-nerd
   ttf-cascadia-mono-nerd
@@ -287,14 +290,11 @@ gui_pkgs=(
   ttf-terminus-nerd
   ttf-ubuntu-mono-nerd
   vde2
-  vifm
   vlc
-  whois
   wireshark-qt
   wpa_supplicant
   xdg-user-dirs
   xdg-utils
-  zellij
 )
 
 # Configure keyboard
