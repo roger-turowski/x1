@@ -513,26 +513,26 @@ arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
 # arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
 # From the host (outside chroot), run everything in one shot:
 arch-chroot $my_root_mount /usr/bin/env bash << CHROOT_EOF
-set -e
+  set -e
 
-# Install GRUB
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+  # Install GRUB
+  grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 
-# Generate initial GRUB config
-grub-mkconfig -o /boot/grub/grub.cfg
+  # Generate initial GRUB config
+  grub-mkconfig -o /boot/grub/grub.cfg
 
-# Extract the submenu ID and entry ID dynamically
-# Note: \$ escapes prevent host expansion; chroot bash interprets them
-SUBMENU_ID=\$(grep "^submenu" /boot/grub/grub.cfg | head -1 | grep -oP "menuentry_id_option .\\\\K[^']+\\")
-ENTRY_ID=\$(grep "menuentry .*with Linux linux'" /boot/grub/grub.cfg | head -1 | grep -oP "menuentry_id_option .\\\\K[^']+\\")
+  # Extract the submenu ID and entry ID dynamically
+  # Note: \$ escapes prevent host expansion; chroot bash interprets them
+  SUBMENU_ID=\$(grep "^submenu" /boot/grub/grub.cfg | head -1 | grep -oP "menuentry_id_option .\\\\K[^']+\\")
+  ENTRY_ID=\$(grep "menuentry .*with Linux linux'" /boot/grub/grub.cfg | head -1 | grep -oP "menuentry_id_option .\\\\K[^']+\\")
 
-# Set default to main kernel (submenu path format)
-sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"\${SUBMENU_ID}>\${ENTRY_ID}\"/" /etc/default/grub
+  # Set default to main kernel (submenu path format)
+  sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"\${SUBMENU_ID}>\${ENTRY_ID}\"/" /etc/default/grub
 
-# Regenerate GRUB config with the new default
-grub-mkconfig -o /boot/grub/grub.cfg
+  # Regenerate GRUB config with the new default
+  grub-mkconfig -o /boot/grub/grub.cfg
 
-echo "Done. GRUB_DEFAULT=\${SUBMENU_ID}>\${ENTRY_ID}"
+  echo "Done. GRUB_DEFAULT=\${SUBMENU_ID}>\${ENTRY_ID}"
 CHROOT_EOF
 
 # ToDo: Optimize this section
