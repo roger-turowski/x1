@@ -167,6 +167,8 @@ pacstrap_pkgs=(
   linux
   linux-firmware
   linux-headers
+  linux-lts
+  linux-lts-headers
   mc
   nano
   networkmanager
@@ -497,7 +499,7 @@ echo -e $my_host_name >> $my_root_mount/etc/hostname
 # arch-chroot $my_root_mount echo root:change-me | chpasswd
 
 # Enable color output for pacman and specify the number of parallel downloads
-arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 4/' "/etc/pacman.conf"
+arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
 
 # Install the rest of the system packages
 arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
@@ -506,9 +508,32 @@ arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
 # pacman -S --noconfirm xf86-video-amdgpu
 # pacman -S --noconfirm nvidia nvidia-utils nvidia-settings
 
+# Install and configure GRUB for normal and LTS kernels
+# arch-chroot $my_root_mount grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+# arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
+# From the host (outside chroot), run everything in one shot:
+arch-chroot $my_root_mount /usr/bin/env bash << CHROOT_EOF
+set -e
+
 # Install GRUB
-arch-chroot $my_root_mount grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
-arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+
+# Generate initial GRUB config
+grub-mkconfig -o /boot/grub/grub.cfg
+
+# Extract the submenu ID and entry ID dynamically
+# Note: \$ escapes prevent host expansion; chroot bash interprets them
+SUBMENU_ID=\$(grep "^submenu" /boot/grub/grub.cfg | head -1 | grep -oP "menuentry_id_option .\\\\K[^']+\\")
+ENTRY_ID=\$(grep "menuentry .*with Linux linux'" /boot/grub/grub.cfg | head -1 | grep -oP "menuentry_id_option .\\\\K[^']+\\")
+
+# Set default to main kernel (submenu path format)
+sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"\${SUBMENU_ID}>\${ENTRY_ID}\"/" /etc/default/grub
+
+# Regenerate GRUB config with the new default
+grub-mkconfig -o /boot/grub/grub.cfg
+
+echo "Done. GRUB_DEFAULT=\${SUBMENU_ID}>\${ENTRY_ID}"
+CHROOT_EOF
 
 # ToDo: Optimize this section
 # Enable Services
@@ -521,7 +546,7 @@ arch-chroot $my_root_mount systemctl enable NetworkManager \
   reflector.timer \
   fstrim.timer \
   firewalld \
-  acpid \
+  acpid
 
 # Make wheel group sudo enabled
 SUDOER_TMP=$(mktemp)
