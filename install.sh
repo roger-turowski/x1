@@ -512,31 +512,31 @@ arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
 # arch-chroot $my_root_mount grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 # arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
 # From the host (outside chroot), run everything in one shot:
-arch-chroot $my_root_mount /usr/bin/env bash << CHROOT_EOF
+arch-chroot /mnt /usr/bin/env bash << 'CHROOT_EOF'
+  export LANG=C
   set -e
 
   # Install GRUB
   grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 
-  # Generate initial GRUB config
+  # Configure GRUB the first time to ensure entries are created for both the normal and LTS kernels
   grub-mkconfig -o /boot/grub/grub.cfg
 
-  # Extract the submenu ID and entry ID dynamically
-  # Note: \$ escapes prevent host expansion; chroot bash interprets them
-  SUBMENU_ID=\$(grep "^submenu" /boot/grub/grub.cfg | head -1 | grep -oP "menuentry_id_option .\\\\K[^']+\\")
-  ENTRY_ID=\$(grep "menuentry .*with Linux linux'" /boot/grub/grub.cfg | head -1 | grep -oP "menuentry_id_option .\\\\K[^']+\\")
+  # Extract submenu and entry IDs (sed-based, no PCRE needed)
+  SUBMENU_ID=$(grep "^submenu" /boot/grub/grub.cfg | head -1 | sed -n "s/.*menuentry_id_option '\([^']*\)'.*/\1/p")
+  ENTRY_ID=$(grep "menuentry .*with Linux linux'" /boot/grub/grub.cfg | head -1 | sed -n "s/.*menuentry_id_option '\([^']*\)'.*/\1/p")
 
-  # Set default to main kernel (submenu path format)
-  sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"\${SUBMENU_ID}>\${ENTRY_ID}\"/" /etc/default/grub
-
-  # Set custom colors in GRUB
-  sed -i 's/^#GRUB_COLOR_NORMAL=.*/GRUB_COLOR_NORMAL="cyan\/blue"/' /etc/default/grub
-  sed -i 's/^#GRUB_COLOR_HIGHLIGHT=.*/GRUB_COLOR_HIGHLIGHT="light-cyan\/black"/' /etc/default/grub
+  # Apply GRUB_DEFAULT
+  sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"${SUBMENU_ID}>${ENTRY_ID}\"/" /etc/default/grub
   
-  # Regenerate GRUB config with the new default
+  # Configure custom GRUB colors
+  sed -i 's/^#GRUB_COLOR_NORMAL=.*/GRUB_COLOR_NORMAL="cyan\/blue"/' /etc/default/grub
+  sed -i 's/^#GRUB_COLOR_HIGHLIGHT=.*/GRUB_COLOR_HIGHLIGHT="light-cyan\/black"/' /etc/default/grub 
+  
+  # Rebuild GRUB configuration to apply the new default entry
   grub-mkconfig -o /boot/grub/grub.cfg
 
-  echo "Done. GRUB_DEFAULT=\${SUBMENU_ID}>\${ENTRY_ID}"
+  echo "Done. GRUB_DEFAULT=${SUBMENU_ID}>${ENTRY_ID}"
 CHROOT_EOF
 
 # ToDo: Optimize this section
