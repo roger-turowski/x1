@@ -529,6 +529,10 @@ arch-chroot $my_root_mount /usr/bin/env bash << CHROOT_EOF
   # Set default to main kernel (submenu path format)
   sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"\${SUBMENU_ID}>\${ENTRY_ID}\"/" /etc/default/grub
 
+  # Set custom colors in GRUB
+  sed -i 's/^#GRUB_COLOR_NORMAL=.*/GRUB_COLOR_NORMAL="cyan\/blue"/' /etc/default/grub
+  sed -i 's/^#GRUB_COLOR_HIGHLIGHT=.*/GRUB_COLOR_HIGHLIGHT="light-cyan\/black"/' /etc/default/grub
+  
   # Regenerate GRUB config with the new default
   grub-mkconfig -o /boot/grub/grub.cfg
 
