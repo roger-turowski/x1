@@ -394,7 +394,8 @@ fi
 
 # Make a password hash here with mkpasswd and assign to my_password_hash at runtime
 # Generate a salt for the password hash
-my_salt=$(tr -dc '0-9a-zA-Z' < /dev/urandom | head -c 16)
+# my_salt=$(tr -dc '0-9a-zA-Z' < /dev/urandom | head -c 16)
+my_salt=$(tr -dc '0-9a-zA-Z' </dev/urandom | head -c16 || true)
 
 echo "Create a password for $my_user_id"
 my_password_hash=$(mkpasswd -m sha-512 --salt="$my_salt")
