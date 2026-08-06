@@ -72,7 +72,7 @@ readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
 readonly snapper_conf="/etc/snapper/configs/root" 
 readonly updatedb_conf="/etc/updatedb.conf"
 # Packages to install
-readonly pacstrap_pkgs=(
+pacstrap_pkgs=(
   # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
   base
   base-devel
