@@ -261,25 +261,25 @@ configure_pacman_preinstall() {
   #   0 - Success
   #   1 - Error (if the pacman.conf file does not exist or is not writable)
   #==============================================================================
-  local pacman_conf="${1:-/etc/pacman.conf}"
+  local pacman_conf_local="${1:-/etc/pacman.conf}"
   local parallel_downloads="${2:-7}"
   local enable_color="${3:-true}"
 
-  if [[ ! -f "$pacman_conf" ]]; then
+  if [[ ! -f "$pacman_conf_local" ]]; then
     error_result "Pacman configuration file not found: $pacman_conf"
   fi
 
-  if [[ ! -w "$pacman_conf" ]]; then
+  if [[ ! -w "$pacman_conf_local" ]]; then
     error_result "Pacman configuration file is not writable: $pacman_conf"
   fi
 
   if [[ "$enable_color" == true ]]; then
-    sed -i 's/#Color/Color/' "$pacman_conf"
+    sed -i 's/#Color/Color/' "$pacman_conf_local"
   else
     sed -i 's/Color/#Color/' "$pacman_conf"
   fi
 
-  sed -i "s/ParallelDownloads = [0-9]\+/ParallelDownloads = $parallel_downloads/" "$pacman_conf"
+  sed -i "s/ParallelDownloads = [0-9]\+/ParallelDownloads = $parallel_downloads/" "$pacman_conf_local"
 
   ok_result "Pacman pre-install configuration updated successfully."
 }
