@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-
+# region - Notes
 # See https://github.com/walian0/bashscripts/blob/main/arch_plasma_auto.bash
 
 # General Notes
@@ -38,12 +38,12 @@
 # Assign a VBoxSVGA video adapter to use Wayland, else a black screen will appear.
 # Use a Bridged network adapter so ssh can be used for installation and troubleshooting.
 # Set a root password immediately to enable connecting via ssh
-
+# endregion
 
 set -euo pipefail
-
+#region - Variables
 # =============================================================================
-# Initialize "constants" for the script"
+# Initialize "constants" and variables for the script"
 # =============================================================================
 # Logging
 readonly LOG_FILE="/var/log/arch-install.log"
@@ -72,8 +72,13 @@ readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
 readonly snapper_conf="/etc/snapper/configs/root" 
 readonly updatedb_conf="/etc/updatedb.conf"
 # Packages to install
+readonly preinstall_pkgs=(
+  # Packages to install before the main installation
+  mkpasswd
+)
 pacstrap_pkgs=(
-  # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
+  # Packages to install using pacstrap. Must not be readonly.
+  # Omit CPU firmware since we will detect the CPU type and add it later.
   base
   base-devel
   bash-completion
@@ -182,6 +187,7 @@ readonly gui_pkgs=(
   xdg-user-dirs
   xdg-utils
 )
+#endregion - Variables
 # =============================================================================
 # Function Definitions
 # =============================================================================
@@ -236,9 +242,15 @@ _log() {
       echo "$line" >> "$LOG_FILE"
   fi
 }
-log_info()  { _log "INFO"  "$@"; }
-log_warn()  { _log "WARN"  "$@"; }
-log_error() { _log "ERROR" "$@"; }
+log_info()  {
+  _log "INFO"  "$@"; 
+}
+log_warn()  {
+  _log "WARN"  "$@";
+}
+log_error() {
+   _log "ERROR" "$@";
+}
 log_debug() {
     [[ "$VERBOSE" == "true" ]] || return 0
     _log "DEBUG" "$@"
@@ -346,17 +358,25 @@ wipe_disk_signatures() {
 
   log_info "Disk ${disk} wiped clean"
 }
-
+install_preinstall_pkgs() {
+  local pkgs=("$@")
+  log_info "Installing required preinstall packages"
+  pacman --noconfirm -Sy "${pkgs[@]}" || {
+    log_error "Failed to install required preinstall packages: $*"
+    return 1
+  }
+  log_success "Required preinstall packages installed successfully"
+}
 # =============================================================================
 # main script execution starts here
 # =============================================================================
 check_for_root
 configure_pacman_preinstall "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
-
-command -v mkpasswd >/dev/null 2>&1 || {
-  echo >&2 "Installing mkpasswd (part of the whois package.)";
-  pacman --noconfirm -S whois; 
-}
+install_preinstall_pkgs "${preinstall_pkgs[@]}"
+# command -v mkpasswd >/dev/null 2>&1 || {
+#   echo >&2 "Installing mkpasswd (part of the whois package.)";
+#   pacman --noconfirm -S whois; 
+# }
 
 echo "List of disks available:"
 lsblk -d -e 11 -e 7 -o name,size
