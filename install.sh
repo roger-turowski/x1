@@ -40,7 +40,7 @@
 # Set a root password immediately to enable connecting via ssh
 
 
-set -eu0 pipefail
+set -euo pipefail
 
 # =============================================================================
 # Initialize "constants" for the script"
