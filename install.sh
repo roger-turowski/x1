@@ -45,6 +45,9 @@ set -eu0 pipefail
 # =============================================================================
 # Initialize "constants" for the script"
 # =============================================================================
+# Logging
+readonly LOG_FILE="/var/log/arch-install.log"
+readonly VERBOSE="${VERBOSE:-false}"
 # User and locale
 readonly my_timezone="US/Michigan"
 readonly my_root_mount="/mnt"
@@ -68,7 +71,7 @@ readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
 # Application configuration files
 readonly snapper_conf="/etc/snapper/configs/root" 
 readonly updatedb_conf="/etc/updatedb.conf"
-
+# Packages to install
 readonly pacstrap_pkgs=(
   # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
   base
@@ -117,7 +120,6 @@ readonly pacstrap_pkgs=(
   zsh
   zsh-completions
 )
-
 readonly gui_pkgs=(
   # Packages to install for the GUI environment
   acpi
@@ -180,7 +182,6 @@ readonly gui_pkgs=(
   xdg-user-dirs
   xdg-utils
 )
-
 # =============================================================================
 # Function Definitions
 # =============================================================================
@@ -208,6 +209,40 @@ check_for_root() {
     error_result "This script must be run as root!"
   fi
 }
+_log() {
+  # =============================================================================
+  # _log
+  # -----------------------------------------------------------------------------
+  # Writes timestamped log messages to stderr and optionally to a log file.
+  #
+  # Arguments:
+  #   $1 - Log level (INFO, WARN, ERROR, DEBUG)
+  #   $2 - Message text
+  #
+  # Environment:
+  #   LOG_FILE - If set, messages are also appended to this file
+  # =============================================================================
+  local level="$1"
+  shift
+  local msg="$*"
+  local timestamp
+  timestamp="$(date -u +%FT%TZ)"
+
+  local line="${timestamp} [${level}] ${msg}"
+
+  echo "$line" >&2
+
+  if [[ -n "${LOG_FILE:-}" ]]; then
+      echo "$line" >> "$LOG_FILE"
+  fi
+}
+log_info()  { _log "INFO"  "$@"; }
+log_warn()  { _log "WARN"  "$@"; }
+log_error() { _log "ERROR" "$@"; }
+log_debug() {
+    [[ "$VERBOSE" == "true" ]] || return 0
+    _log "DEBUG" "$@"
+}
 configure_pacman_preinstall() {
   # =============================================================================
   # configure_pacman_preinstall
@@ -232,12 +267,10 @@ configure_pacman_preinstall() {
 
   if [[ ! -f "$pacman_conf" ]]; then
     error_result "Pacman configuration file not found: $pacman_conf"
-    return 1
   fi
 
   if [[ ! -w "$pacman_conf" ]]; then
     error_result "Pacman configuration file is not writable: $pacman_conf"
-    return 1
   fi
 
   if [[ "$enable_color" == true ]]; then
@@ -249,6 +282,69 @@ configure_pacman_preinstall() {
   sed -i "s/ParallelDownloads = [0-9]\+/ParallelDownloads = $parallel_downloads/" "$pacman_conf"
 
   ok_result "Pacman pre-install configuration updated successfully."
+}
+teardown_existing_mappings() {
+    # Mapper devices are stacked—close the top layer first, then the bottom
+    local disk="$1"
+
+    log_info "Tearing down existing mappings on ${disk}"
+
+    # 1. Deactivate LVM volume groups on this disk
+    #    vgchange deactivates all LVs in a VG, closing the /dev/mapper entries
+    local vg
+    for vg in $(vgs --noheadings --separator ' ' 2>/dev/null | awk '{print $1}'); do
+        # Check if this VG lives on the target disk
+        if pvs --noheadings 2>/dev/null | grep -q "$disk"; then
+            log_info "Deactivating volume group: ${vg}"
+            vgchange -an "$vg" || return 1
+        fi
+    done
+
+    # 2. Close LUKS containers on this disk
+    local luks_dev
+    for luks_dev in $(lsblk -ln -o NAME,TYPE "$disk" 2>/dev/null | awk '$2 == "crypt" {print $1}'); do
+        log_info "Closing LUKS container: ${luks_dev}"
+        cryptsetup close "$luks_dev" || return 1
+    done
+
+    # 3. Unmount anything still hanging on
+    local mountpoint
+    for mountpoint in $(lsblk -ln -o MOUNTPOINT "$disk" 2>/dev/null | grep -v '^$'); do
+        log_info "Unmounting ${mountpoint}"
+        umount -R "$mountpoint" 2>/dev/null || true
+    done
+
+    log_info "Mapping teardown complete for ${disk}"
+}
+wipe_disk_signatures() {
+  # Now wipe the physical disk cleanly after teardown:
+  local disk="$1"
+
+  # Validate
+  if [[ ! -b "$disk" ]]; then
+    log_error "${disk} is not a block device"
+    return 1
+  fi
+
+  # Tear down existing LUKS/LVM layers first
+  teardown_existing_mappings "$disk"
+
+  # Wipe each partition
+  local partition
+  for partition in "${disk}"?*; do
+    [[ -b "$partition" ]] || continue
+    log_info "Wiping ${partition}"
+    wipefs --all --force "$partition" || return 1
+  done
+
+  # Wipe the main device (partition table + GPT/MBR headers)
+  log_info "Wiping ${disk}"
+  wipefs --all --force "$disk" || return 1
+
+  # Zap the MBR/GPT entirely for a truly clean slate
+  sgdisk --zap-all "$disk" 2>/dev/null || true
+
+  log_info "Disk ${disk} wiped clean"
 }
 
 # =============================================================================
@@ -383,7 +479,9 @@ pacman --noconfirm -Sy fastfetch git tree bat tldr tmux nano
 
 # Clear the disk
 # Deactivate ALL volume groups
-vgchange -an
+# vgchange -an
+
+teardown_existing_mappings "$my_disk"
 
 # Removes all active device mapper devices
 dmsetup remove_all
@@ -392,15 +490,16 @@ dmsetup remove_all
 mdadm --stop --scan
 
 # 1. Aggressively wipe all signatures (filesystem, raid, partition table)
-wipefs --all --force "$my_disk"
+# wipefs --all --force "$my_disk"
+wipe_disk_signatures "$my_disk"
 
 # 2. Destroy GPT headers (Primary AND Backup) explicitly
-sgdisk --zap-all "$my_disk"
+# sgdisk --zap-all "$my_disk"
 
 # 3. Force the kernel to drop the device and re-scan
 # This simulates unplugging/replugging the drive without rebooting
-echo 1 > /sys/block/sda/device/delete
-echo "- - -" > /sys/class/scsi_host/host0/scan 
+# echo 1 > /sys/block/sda/device/delete
+# echo "- - -" > /sys/class/scsi_host/host0/scan 
 # NOTE: Replace 'host0' with your actual host number found via: ls /sys/class/scsi_host/
 
 # Clean the ssd disk using blkdiscard
