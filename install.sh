@@ -39,111 +39,38 @@
 # Use a Bridged network adapter so ssh can be used for installation and troubleshooting.
 # Set a root password immediately to enable connecting via ssh
 
-# Error handling
 
-set -eu
+set -eu0 pipefail
 
-success_color="\e[1;32m"
-error_color="\e[1;31m"
-warning_color="\e[1;33m"
-info_color="\e[1;34m"
-no_color="\e[0m"
+# =============================================================================
+# Initialize "constants" for the script"
+# =============================================================================
+# User and locale
+readonly my_timezone="US/Michigan"
+readonly my_root_mount="/mnt"
+readonly my_host_name="arch"
+readonly my_user_id="roger"
+readonly my_full_name="Roger Turowski"
+# Colors for console output
+readonly success_color="\e[1;32m"
+readonly error_color="\e[1;31m"
+readonly warning_color="\e[1;33m"
+readonly info_color="\e[1;34m"
+readonly no_color="\e[0m"
+# Mount options for BTRFS subvolumes
+readonly MOUNTOPTS="noatime,ssd,space_cache=v2,compress=zstd,discard=async"
+# Options for pacman 
+readonly pacman_conf="/etc/pacman.conf"
+readonly pacman_mirrorlist="/etc/pacman.d/mirrorlist"
+readonly pacman_parallel_downloads=7
+readonly pacman_color_output=true
+readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
+# Application configuration files
+readonly snapper_conf="/etc/snapper/configs/root" 
+readonly updatedb_conf="/etc/updatedb.conf"
 
-error_result() {
-	# [   OK   ]
-  # [  ERR   ]
-  # [  WARN  ]
-  # [  INFO  ]
-  echo -e "[   ${error_color}ERR${no_color}    ] $1"
-	exit 1
-}
-
-ok_result() {
-	echo -e "[    ${success_color}OK${no_color}    ] $1"
-}
-
-warning_result() {
-	echo -e "[  ${warning_color}WARN${no_color}   ] $1"
-  read -p -r "Press the Enter key to continue"
-}
-
-info_result() {
-	echo -e "[   ${info_color}INFO${no_color}   ] $1"
-}
-
-# Ensure the script is being run by root
-if [[ "$UID" -ne 0 ]]; then
-  error_result "This script must be run as root!"
-fi
-
-# Initialize variables
-my_timezone="US/Michigan"
-my_root_mount="/mnt"
-my_host_name="arch"
-my_user_id="roger"
-my_full_name="Roger Turowski"
-
-# Enable color output for pacman and specify the number of parallel downloads
-sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
-
-command -v mkpasswd >/dev/null 2>&1 || {
-  echo >&2 "Installing mkpasswd (part of the whois package.)";
-  pacman --noconfirm -S whois; 
-}
-
-echo "List of disks available:"
-lsblk -d -e 11 -e 7 -o name,size
-read -r -p "Disk to install to: " install_disk
-
-if [ -e "/dev/$install_disk" ]; then
-  info_result "Disk $install_disk exists."
-else
-  error_result "Disk does not exist: $install_disk"
-fi
-
-read -r -p "Proceed with installation to $install_disk? [yes/no] " disk_confirmation
-case $disk_confirmation in
-  yes ) echo Proceeding...;;
-  no ) error_result "Cancelled by user to preserve the current disk layout.";;
-  * ) error_result "Unable to proceed due to an invalid response";;
-esac
-
-if [[ "$install_disk" =~ ^nvme[0-3]n[0-3]$ ]]; then
-  echo "Installing to nvme disk $install_disk"
-  my_disk="/dev/$install_disk"
-  my_partition_efi="/dev/${install_disk}p1"
-  my_partition_root="/dev/${install_disk}p2"
-elif [[ "$install_disk" =~ ^sd[a-z]$ ]]; then
-  echo "Installing to SATA disk $install_disk"
-  my_disk="/dev/$install_disk"
-  my_partition_efi="/dev/${install_disk}1"
-  my_partition_root="/dev/${install_disk}2"
-else
-  error_result "Invalid disk was selected: $install_disk"
-fi
-
-# Make a password hash here with mkpasswd and assign to my_password_hash at runtime
-# Generate a salt for the password hash
-my_salt=$(tr -dc '0-9a-zA-Z' < /dev/urandom | head -c 16)
-
-echo "Create a password for $my_user_id"
-my_password_hash=$(mkpasswd -m sha-512 --salt="$my_salt")
-
-echo "Enter the password again to confirm"
-my_password_hash_confirmed=$(mkpasswd -m sha-512 --salt="$my_salt")
-
-case $my_password_hash in
-	"$my_password_hash_confirmed")
-		ok_result "Password confirmed"
-		;;
-	*)
-		error_result "Password not confirmed"
-		;;
-esac
-
-
-# Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
-pacstrap_pkgs=(
+readonly pacstrap_pkgs=(
+  # Packages to install using pacstrap. Omit CPU firmware since we will detect the CPU type and add it later
   base
   base-devel
   bash-completion
@@ -191,53 +118,8 @@ pacstrap_pkgs=(
   zsh-completions
 )
 
-# Detect the CPU type to install appropriate firmware
-if (grep -m 1 "GenuineIntel" "/proc/cpuinfo"); then
-  cpu_firmware="intel-ucode"
-  ok_result "Intel CPU was found"
-  pacstrap_pkgs+=("$cpu_firmware")
-elif (grep -m 1 "AuthenticAMD" "/proc/cpuinfo"); then
-  cpu_firmware="amd-ucode"
-  ok_result "AMD CPU was found"
-  pacstrap_pkgs+=("$cpu_firmware")
-else
-  info_result "No CPU micro-code is available for this CPU."
-fi
-
-# Detect if running on a hypervisor and install the correct additions
-if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
-  info_result "Hypervisor is detected"
-  my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -c 16-)
-  my_hypervisor_product=$(dmidecode -t system | grep 'Product' | cut -c 16-)
-  info_result "Hypervisor Manufacturer is: $my_hypervisor_manufacturer"
-  info_result "Hypervisor Product is: $my_hypervisor_product"
-  case "$my_hypervisor_product" in
-    "VirtualBox")
-      echo "Running on VirtualBox"
-      pacstrap_pkgs+=("virtualbox-guest-utils")
-      ;;
-    "VMware Virtual Platform")
-      echo "Running on VMware"
-      pacstrap_pkgs+=("open-vm-tools")
-      ;;
-    *)
-      case "$my_hypervisor_manufacturer" in
-        "VMware, Inc.")
-          echo "Running on VMware"
-          pacstrap_pkgs+=("open-vm-tools")
-          ;;
-        "QEMU")
-          echo "Running on QEMU"
-          pacstrap_pkgs+=("qemu-guest-agent")
-          ;;
-        *)
-          echo "Running on unknown hypervisor"
-          ;;
-      esac
-  esac
-fi
-
-gui_pkgs=(
+readonly gui_pkgs=(
+  # Packages to install for the GUI environment
   acpi
   acpi_call
   acpid
@@ -298,6 +180,183 @@ gui_pkgs=(
   xdg-user-dirs
   xdg-utils
 )
+
+# =============================================================================
+# Function Definitions
+# =============================================================================
+error_result() {
+	# [   OK   ]
+  # [  ERR   ]
+  # [  WARN  ]
+  # [  INFO  ]
+  echo -e "[   ${error_color}ERR${no_color}    ] $1"
+	exit 1
+}
+ok_result() {
+	echo -e "[    ${success_color}OK${no_color}    ] $1"
+}
+warning_result() {
+	echo -e "[  ${warning_color}WARN${no_color}   ] $1"
+  read -p -r "Press the Enter key to continue"
+}
+info_result() {
+	echo -e "[   ${info_color}INFO${no_color}   ] $1"
+}
+check_for_root() {
+  # Ensure the script is being run by root
+  if [[ "$UID" -ne 0 ]]; then
+    error_result "This script must be run as root!"
+  fi
+}
+configure_pacman_preinstall() {
+  # =============================================================================
+  # configure_pacman_preinstall
+  # -----------------------------------------------------------------------------
+  # Configure color output for pacman and specify number of parallel downloads
+  #
+  # Arguments:
+  #   $1 - Path to the pacman.conf file (default: /etc/pacman.conf)
+  #   $2 - Number of parallel downloads (default: 7)
+  #   $3 - Enable color output (default: true)
+  #
+  # Output:
+  #   None (stdout is silent on success)
+  #
+  # Returns:
+  #   0 - Success
+  #   1 - Error (if the pacman.conf file does not exist or is not writable)
+  #==============================================================================
+  local pacman_conf="${1:-/etc/pacman.conf}"
+  local parallel_downloads="${2:-7}"
+  local enable_color="${3:-true}"
+
+  if [[ ! -f "$pacman_conf" ]]; then
+    error_result "Pacman configuration file not found: $pacman_conf"
+    return 1
+  fi
+
+  if [[ ! -w "$pacman_conf" ]]; then
+    error_result "Pacman configuration file is not writable: $pacman_conf"
+    return 1
+  fi
+
+  if [[ "$enable_color" == true ]]; then
+    sed -i 's/#Color/Color/' "$pacman_conf"
+  else
+    sed -i 's/Color/#Color/' "$pacman_conf"
+  fi
+
+  sed -i "s/ParallelDownloads = [0-9]\+/ParallelDownloads = $parallel_downloads/" "$pacman_conf"
+
+  ok_result "Pacman pre-install configuration updated successfully."
+}
+
+# =============================================================================
+# main script execution starts here
+# =============================================================================
+check_for_root
+configure_pacman_preinstall "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
+
+command -v mkpasswd >/dev/null 2>&1 || {
+  echo >&2 "Installing mkpasswd (part of the whois package.)";
+  pacman --noconfirm -S whois; 
+}
+
+echo "List of disks available:"
+lsblk -d -e 11 -e 7 -o name,size
+read -r -p "Disk to install to: " install_disk
+
+if [ -e "/dev/$install_disk" ]; then
+  info_result "Disk $install_disk exists."
+else
+  error_result "Disk does not exist: $install_disk"
+fi
+
+read -r -p "Proceed with installation to $install_disk? [yes/no] " disk_confirmation
+case $disk_confirmation in
+  yes ) echo Proceeding...;;
+  no ) error_result "Cancelled by user to preserve the current disk layout.";;
+  * ) error_result "Unable to proceed due to an invalid response";;
+esac
+
+if [[ "$install_disk" =~ ^nvme[0-3]n[0-3]$ ]]; then
+  echo "Installing to nvme disk $install_disk"
+  my_disk="/dev/$install_disk"
+  my_partition_efi="/dev/${install_disk}p1"
+  my_partition_root="/dev/${install_disk}p2"
+elif [[ "$install_disk" =~ ^sd[a-z]$ ]]; then
+  echo "Installing to SATA disk $install_disk"
+  my_disk="/dev/$install_disk"
+  my_partition_efi="/dev/${install_disk}1"
+  my_partition_root="/dev/${install_disk}2"
+else
+  error_result "Invalid disk was selected: $install_disk"
+fi
+
+# Make a password hash here with mkpasswd and assign to my_password_hash at runtime
+# Generate a salt for the password hash
+my_salt=$(tr -dc '0-9a-zA-Z' < /dev/urandom | head -c 16)
+
+echo "Create a password for $my_user_id"
+my_password_hash=$(mkpasswd -m sha-512 --salt="$my_salt")
+
+echo "Enter the password again to confirm"
+my_password_hash_confirmed=$(mkpasswd -m sha-512 --salt="$my_salt")
+
+case $my_password_hash in
+	"$my_password_hash_confirmed")
+		ok_result "Password confirmed"
+		;;
+	*)
+		error_result "Password not confirmed"
+		;;
+esac
+
+# Detect the CPU type to install appropriate firmware
+if (grep -m 1 "GenuineIntel" "/proc/cpuinfo"); then
+  cpu_firmware="intel-ucode"
+  ok_result "Intel CPU was found"
+  pacstrap_pkgs+=("$cpu_firmware")
+elif (grep -m 1 "AuthenticAMD" "/proc/cpuinfo"); then
+  cpu_firmware="amd-ucode"
+  ok_result "AMD CPU was found"
+  pacstrap_pkgs+=("$cpu_firmware")
+else
+  info_result "No CPU micro-code is available for this CPU."
+fi
+
+# Detect if running on a hypervisor and install the correct additions
+if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
+  info_result "Hypervisor is detected"
+  my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -c 16-)
+  my_hypervisor_product=$(dmidecode -t system | grep 'Product' | cut -c 16-)
+  info_result "Hypervisor Manufacturer is: $my_hypervisor_manufacturer"
+  info_result "Hypervisor Product is: $my_hypervisor_product"
+  case "$my_hypervisor_product" in
+    "VirtualBox")
+      echo "Running on VirtualBox"
+      pacstrap_pkgs+=("virtualbox-guest-utils")
+      ;;
+    "VMware Virtual Platform")
+      echo "Running on VMware"
+      pacstrap_pkgs+=("open-vm-tools")
+      ;;
+    *)
+      case "$my_hypervisor_manufacturer" in
+        "VMware, Inc.")
+          echo "Running on VMware"
+          pacstrap_pkgs+=("open-vm-tools")
+          ;;
+        "QEMU")
+          echo "Running on QEMU"
+          pacstrap_pkgs+=("qemu-guest-agent")
+          ;;
+        *)
+          echo "Running on unknown hypervisor"
+          ;;
+      esac
+  esac
+fi
 
 # Configure keyboard
 localectl set-keymap us
@@ -436,7 +495,6 @@ chattr +C $my_root_mount/@/var
 umount $my_root_mount
 
 # Options used for all mounts utilizing an SSD
-MOUNTOPTS=noatime,ssd,space_cache=v2,compress=zstd,discard=async
 mount /dev/mapper/system-root $my_root_mount -o subvol=@,$MOUNTOPTS
 mount /dev/mapper/system-root $my_root_mount/.snapshots -o subvol=@/.snapshots,$MOUNTOPTS
 mount /dev/mapper/system-root $my_root_mount/boot/grub2/i386-pc -o subvol=@/boot/grub2/i386-pc,$MOUNTOPTS
@@ -447,7 +505,6 @@ mount /dev/mapper/system-root $my_root_mount/srv -o subvol=@/srv,$MOUNTOPTS
 mount /dev/mapper/system-root $my_root_mount/tmp -o subvol=@/tmp,$MOUNTOPTS
 mount /dev/mapper/system-root $my_root_mount/usr/local -o subvol=@/usr/local,$MOUNTOPTS
 mount /dev/mapper/system-root $my_root_mount/var -o subvol=@/var,$MOUNTOPTS
-MOUNTOPTS=
 
 # Mount the EFI partition
 mkdir -p $my_root_mount/boot/efi
@@ -501,17 +558,10 @@ echo -e $my_host_name >> $my_root_mount/etc/hostname
 # Enable color output for pacman and specify the number of parallel downloads
 arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
 
-# Install the rest of the system packages
+# Install the gui packages
 arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
 
-# Uncomment below to install graphics card drivers
-# pacman -S --noconfirm xf86-video-amdgpu
-# pacman -S --noconfirm nvidia nvidia-utils nvidia-settings
-
 # Install and configure GRUB for normal and LTS kernels
-# arch-chroot $my_root_mount grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
-# arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
-# From the host (outside chroot), run everything in one shot:
 arch-chroot /mnt /usr/bin/env bash << 'CHROOT_EOF'
   export LANG=C
   set -e
