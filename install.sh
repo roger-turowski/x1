@@ -547,12 +547,13 @@ lvcreate -l 100%FREE -n home system
 mkfs.fat -n EFI -F32 "$my_partition_efi"
 
 # Format the root volume with BTRFS
-mkfs.btrfs -L root /dev/system/root
+mkfs.btrfs -f -L root /dev/system/root
 
 # Format the home volume with xfs
-mkfs.xfs -L home /dev/system/home
+mkfs.xfs -f -L home /dev/system/home
 
 # Create swap space
+wipefs --all --force /dev/system/swap
 mkswap -L swap /dev/system/swap
 swapon /dev/system/swap
 
