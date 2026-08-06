@@ -385,6 +385,9 @@ elif [[ "$install_disk" =~ ^sd[a-z]$ ]]; then
   my_disk="/dev/$install_disk"
   my_partition_efi="/dev/${install_disk}1"
   my_partition_root="/dev/${install_disk}2"
+  echo "my_disk: $my_disk"
+  echo "my_partition_efi: $my_partition_efi"
+  echo "my_partition_root: $my_partition_root"
 else
   error_result "Invalid disk was selected: $install_disk"
 fi
