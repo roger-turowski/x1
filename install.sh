@@ -74,7 +74,7 @@ readonly updatedb_conf="/etc/updatedb.conf"
 # Packages to install
 readonly preinstall_pkgs=(
   # Packages to install before the main installation
-  mkpasswd
+  whois
 )
 pacstrap_pkgs=(
   # Packages to install using pacstrap. Must not be readonly.
@@ -513,9 +513,6 @@ timedatectl status
 
 # Set-up the fastest Arch mirrors
 reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --save /etc/pacman.d/mirrorlist
-
-# Install tools useful during setup
-pacman --noconfirm -Sy fastfetch git tree bat tldr tmux nano
 
 # Clear the disk
 # Deactivate ALL volume groups
