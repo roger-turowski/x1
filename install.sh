@@ -367,33 +367,49 @@ install_preinstall_pkgs() {
   }
   log_success "Required preinstall packages installed successfully"
 }
+get_install_disk() {
+  local response
+  while true; do
+    printf 'List of disks available:\n' >&2
+    lsblk -d -e 11 -e 7 -o name,size >&2
+    read -r -p "Disk to install to: " response
+
+    if [[ -z "$response" ]]; then
+      printf 'Input cannot be empty\n' >&2
+      continue
+    fi
+
+    if [ ! -b "/dev/$response" ]; then
+      printf 'Error: Disk %s does not exist\n' "$response" >&2
+      continue
+    else
+      printf 'Disk %s exists\n' "$response" >&2
+    fi
+
+    break
+  done
+
+  read -r -p "Proceed with installation to $response? [yes/no] " disk_confirmation
+  case $disk_confirmation in
+    yes ) echo Proceeding...;;
+    no ) error_result "Cancelled by user to preserve the current disk layout.";;
+    * ) error_result "Unable to proceed due to an invalid response";;
+  esac
+  printf '%s\n' "$response"
+}
 # =============================================================================
 # main script execution starts here
 # =============================================================================
 check_for_root
 configure_pacman_preinstall "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
 install_preinstall_pkgs "${preinstall_pkgs[@]}"
-# command -v mkpasswd >/dev/null 2>&1 || {
-#   echo >&2 "Installing mkpasswd (part of the whois package.)";
-#   pacman --noconfirm -S whois; 
-# }
 
-echo "List of disks available:"
-lsblk -d -e 11 -e 7 -o name,size
-read -r -p "Disk to install to: " install_disk
-
-if [ -e "/dev/$install_disk" ]; then
-  info_result "Disk $install_disk exists."
-else
-  error_result "Disk does not exist: $install_disk"
+install_disk=$(get_install_disk)
+if ! install_disk=$(get_install_disk); then
+  printf 'No disk selected. Exiting.\n' >&2
+  exit 1
 fi
-
-read -r -p "Proceed with installation to $install_disk? [yes/no] " disk_confirmation
-case $disk_confirmation in
-  yes ) echo Proceeding...;;
-  no ) error_result "Cancelled by user to preserve the current disk layout.";;
-  * ) error_result "Unable to proceed due to an invalid response";;
-esac
+echo "Install disk is: ${install_disk}"
 
 if [[ "$install_disk" =~ ^nvme[0-3]n[0-3]$ ]]; then
   echo "Installing to nvme disk $install_disk"
