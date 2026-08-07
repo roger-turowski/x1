@@ -365,9 +365,10 @@ install_preinstall_pkgs() {
     log_error "Failed to install required preinstall packages: $*"
     return 1
   }
-  log_success "Required preinstall packages installed successfully"
+  log_info "Required preinstall packages installed successfully"
 }
 get_install_disk() {
+  local disk_confirmation
   local response
   while true; do
     printf 'List of disks available:\n' >&2
@@ -391,9 +392,9 @@ get_install_disk() {
 
   read -r -p "Proceed with installation to $response? [yes/no] " disk_confirmation
   case $disk_confirmation in
-    yes ) echo Proceeding...;;
-    no ) error_result "Cancelled by user to preserve the current disk layout.";;
-    * ) error_result "Unable to proceed due to an invalid response";;
+    yes ) log_info "Proceeding...";;
+    no )  log_error "Cancelled by user to preserve the current disk layout.";;
+    * )   log_error "Unable to proceed due to an invalid response";;
   esac
   printf '%s\n' "$response"
 }
@@ -404,12 +405,11 @@ check_for_root
 configure_pacman_preinstall "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
 install_preinstall_pkgs "${preinstall_pkgs[@]}"
 
-install_disk=$(get_install_disk)
 if ! install_disk=$(get_install_disk); then
   printf 'No disk selected. Exiting.\n' >&2
   exit 1
 fi
-echo "Install disk is: ${install_disk}"
+echo "Install disk selected is: ${install_disk}"
 
 if [[ "$install_disk" =~ ^nvme[0-3]n[0-3]$ ]]; then
   echo "Installing to nvme disk $install_disk"
