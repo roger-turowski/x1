@@ -501,6 +501,14 @@ determine_hypervisor_packages() {
     esac
   fi
 }
+configure_time() {
+  # Configure the time zone and enable NTP
+  local timezone="$1"
+
+  timedatectl set-timezone "$timezone"
+  timedatectl set-ntp true
+  log_info "Time zone set to $timezone and NTP enabled"
+}
 # =============================================================================
 # main script execution starts here
 # =============================================================================
@@ -531,23 +539,16 @@ main() {
   make_password_hash  my_password_hash
   cpu_firmware=$(determine_cpu_firmware)
   hypervisor_pkgs=$(determine_hypervisor_packages)
-  printf 'CPU firmware is: %s\n' "$cpu_firmware"
-  printf 'Hypervisor packages are: %s\n' "$hypervisor_pkgs"
 
   # Configure keyboard
   localectl set-keymap ${keyboard_layout}
 
-  # Set the time zone
-  timedatectl set-timezone $my_timezone
-
-  # Configure ntp
-  timedatectl set-ntp true
-  timedatectl status
+  configure_time "$my_timezone"
 
   # Set-up the fastest Arch mirrors
   reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --save /etc/pacman.d/mirrorlist
 
-  teardown_existing_mappings "$my_disk"
+  wipe_disk_signatures "$my_disk"
 
   # Removes all active device mapper devices
   dmsetup remove_all
@@ -557,10 +558,10 @@ main() {
 
   # 1. Aggressively wipe all signatures (filesystem, raid, partition table)
   # wipefs --all --force "$my_disk"
-  wipe_disk_signatures "$my_disk"
+  # wipe_disk_signatures "$my_disk"
 
   # Inform the OS of partition table changes
-  partprobe "$my_disk"
+  # partprobe "$my_disk"
 
   # PHYSICAL PARTITIONS
 
@@ -794,8 +795,6 @@ CHROOT_EOF
   arch-chroot $my_root_mount systemctl enable grub-btrfsd
   arch-chroot $my_root_mount systemctl enable snapper-boot.timer
 
-  read -rp "Press [Enter] to continue..."
-
   # Allow root to have ssh access initially for troubleshooting while developing
   arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
@@ -850,8 +849,6 @@ CHROOT_EOF
 
   # Create a directory for AppImages
   arch-chroot $my_root_mount mkdir /home/$my_user_id/AppImages/
-  
-  read -rp "Press [Enter] to continue..."
   
   clear
   # Copy this script to the root home directory
