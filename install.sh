@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 # region - Notes
 # See https://github.com/walian0/bashscripts/blob/main/arch_plasma_auto.bash
 
@@ -29,8 +29,6 @@
 # - Add support for different filesystems (XFS, ext4, etc.) 
 # - Add support for different partition schemes (MBR, etc.)
 
-
-
 # Virtualbox Guest Notes
 # ======================
 # Create a disk image at least 128GB in size.
@@ -38,8 +36,15 @@
 # Assign a VBoxSVGA video adapter to use Wayland, else a black screen will appear.
 # Use a Bridged network adapter so ssh can be used for installation and troubleshooting.
 # Set a root password immediately to enable connecting via ssh
-# endregion
 
+# Set-up Wi-Fi connection example:
+  # iwctl adapter list
+  # iwctl station wlan0 get-networks
+  # iwbtl station wlan0 connect <network_name>
+  # ip a
+  # ping -c 4 archlinux.org
+
+# endregion
 set -euo pipefail
 #region - Variables
 # =============================================================================
@@ -76,7 +81,7 @@ readonly preinstall_pkgs=(
   # Packages to install before the main installation
   whois
 )
-pacstrap_pkgs=(
+readonly pacstrap_pkgs=(
   # Packages to install using pacstrap. Must not be readonly.
   # Omit CPU firmware since we will detect the CPU type and add it later.
   base
@@ -91,10 +96,12 @@ pacstrap_pkgs=(
   dnsmasq
   dosfstools
   e2fsprogs
+  efibootmgr
   eza
   fastfetch
   fzf
   git
+  grub
   grub-btrfs
   htop
   inetutils
@@ -104,6 +111,7 @@ pacstrap_pkgs=(
   linux-headers
   linux-lts
   linux-lts-headers
+  lvm2
   mc
   nano
   networkmanager
@@ -116,6 +124,7 @@ pacstrap_pkgs=(
   reflector
   rsync
   sudo
+  thin-provisioning-tools
   tmux
   util-linux
   vifm
@@ -442,18 +451,72 @@ make_password_hash() {
   esac
   printf 'Password hash generated: %s for user %s\n' "$my_password_hash" "$my_user_id" >&2
 }
+determine_cpu_firmware() {
+  # Detect the CPU type to install appropriate firmware
+  if (grep -m 1 "GenuineIntel" "/proc/cpuinfo" >&2); then
+    log_info "Intel CPU was found"
+    printf '%s\n' "intel-ucode"
+  elif (grep -m 1 "AuthenticAMD" "/proc/cpuinfo" >&2); then
+    log_info "AMD CPU was found"
+    printf '%s\n' "amd-ucode"
+  else
+    log_error "No CPU micro-code is available for this CPU."
+  fi
+}
+determine_hypervisor_packages() {
+  # Detect if running on a hypervisor and install the correct additions
+  
+  local my_hypervisor_manufacturer
+  local my_hypervisor_product
+  
+  if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
+    log_info "Hypervisor is detected"
+    my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -c 16-)
+    my_hypervisor_product=$(dmidecode -t system | grep 'Product' | cut -c 16-)
+    log_info "Hypervisor Manufacturer is: $my_hypervisor_manufacturer"
+    log_info "Hypervisor Product is: $my_hypervisor_product"
+    case "$my_hypervisor_product" in
+      "VirtualBox")
+        log_info "Running on VirtualBox"
+        printf '%s\n' "virtualbox-guest-utils"
+        ;;
+      "VMware Virtual Platform")
+        log_info "Running on VMware"
+        printf '%s\n' "open-vm-tools"
+        ;;
+      *)
+        case "$my_hypervisor_manufacturer" in
+          "VMware, Inc.")
+            log_info "Running on VMware"
+            printf '%s\n' "open-vm-tools"
+            ;;
+          "QEMU")
+            log_info "Running on QEMU"
+            printf '%s\n' "qemu-guest-agent"
+            ;;
+          *)
+            log_error "Running on unknown hypervisor"
+            ;;
+        esac
+    esac
+  fi
+}
 # =============================================================================
 # main script execution starts here
 # =============================================================================
 
 main() {
-echo "hello"
-
   local my_disk=""
   local my_partition_efi=""
   local my_partition_root=""
   local my_password_hash=""
-
+  local cpu_firmware=""
+  local hypervisor_pkgs=""
+  readonly keyboard_layout="us"
+  readonly disk_pct_of_free_root=40
+  readonly disk_size_swap=8G
+  readonly disk_pct_of_free_home=100
+  
   check_for_root
   configure_pacman_preinstall "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
   install_preinstall_pkgs "${preinstall_pkgs[@]}"
@@ -465,62 +528,13 @@ echo "hello"
 
   build_partition_paths "$install_disk" my_disk my_partition_efi my_partition_root
   make_password_hash  my_password_hash
-
-  # Detect the CPU type to install appropriate firmware
-  if (grep -m 1 "GenuineIntel" "/proc/cpuinfo"); then
-    cpu_firmware="intel-ucode"
-    ok_result "Intel CPU was found"
-    pacstrap_pkgs+=("$cpu_firmware")
-  elif (grep -m 1 "AuthenticAMD" "/proc/cpuinfo"); then
-    cpu_firmware="amd-ucode"
-    ok_result "AMD CPU was found"
-    pacstrap_pkgs+=("$cpu_firmware")
-  else
-    info_result "No CPU micro-code is available for this CPU."
-  fi
-
-  # Detect if running on a hypervisor and install the correct additions
-  if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
-    info_result "Hypervisor is detected"
-    my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -c 16-)
-    my_hypervisor_product=$(dmidecode -t system | grep 'Product' | cut -c 16-)
-    info_result "Hypervisor Manufacturer is: $my_hypervisor_manufacturer"
-    info_result "Hypervisor Product is: $my_hypervisor_product"
-    case "$my_hypervisor_product" in
-      "VirtualBox")
-        echo "Running on VirtualBox"
-        pacstrap_pkgs+=("virtualbox-guest-utils")
-        ;;
-      "VMware Virtual Platform")
-        echo "Running on VMware"
-        pacstrap_pkgs+=("open-vm-tools")
-        ;;
-      *)
-        case "$my_hypervisor_manufacturer" in
-          "VMware, Inc.")
-            echo "Running on VMware"
-            pacstrap_pkgs+=("open-vm-tools")
-            ;;
-          "QEMU")
-            echo "Running on QEMU"
-            pacstrap_pkgs+=("qemu-guest-agent")
-            ;;
-          *)
-            echo "Running on unknown hypervisor"
-            ;;
-        esac
-    esac
-  fi
+  cpu_firmware=$(determine_cpu_firmware)
+  hypervisor_pkgs=$(determine_hypervisor_packages)
+  printf 'CPU firmware is: %s\n' "$cpu_firmware"
+  printf 'Hypervisor packages are: %s\n' "$hypervisor_pkgs"
 
   # Configure keyboard
-  localectl set-keymap us
-
-  # Set-up Wi-Fi connection example:
-  # iwctl adapter list
-  # iwctl station wlan0 get-networks
-  # iwbtl station wlan0 connect <network_name>
-  # ip a
-  # ping -c 4 archlinux.org
+  localectl set-keymap ${keyboard_layout}
 
   # Set the time zone
   timedatectl set-timezone $my_timezone
@@ -531,10 +545,6 @@ echo "hello"
 
   # Set-up the fastest Arch mirrors
   reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --save /etc/pacman.d/mirrorlist
-
-  # Clear the disk
-  # Deactivate ALL volume groups
-  # vgchange -an
 
   teardown_existing_mappings "$my_disk"
 
@@ -547,19 +557,6 @@ echo "hello"
   # 1. Aggressively wipe all signatures (filesystem, raid, partition table)
   # wipefs --all --force "$my_disk"
   wipe_disk_signatures "$my_disk"
-
-  # 2. Destroy GPT headers (Primary AND Backup) explicitly
-  # sgdisk --zap-all "$my_disk"
-
-  # 3. Force the kernel to drop the device and re-scan
-  # This simulates unplugging/replugging the drive without rebooting
-  # echo 1 > /sys/block/sda/device/delete
-  # echo "- - -" > /sys/class/scsi_host/host0/scan 
-  # NOTE: Replace 'host0' with your actual host number found via: ls /sys/class/scsi_host/
-
-  # Clean the ssd disk using blkdiscard
-  # Found blkdiscard fails on VMware guest disks
-  #blkdiscard "$my_disk"
 
   # Inform the OS of partition table changes
   partprobe "$my_disk"
@@ -588,9 +585,9 @@ echo "hello"
   # LOGICAL VOLUMES 
 
   # Create the logical volumes for root, swap and home
-  lvcreate -l 40%FREE -n root system
-  lvcreate -L 8G -n swap system
-  lvcreate -l 100%FREE -n home system
+  lvcreate -l ${disk_pct_of_free_root}%FREE -n root system
+  lvcreate -L ${disk_size_swap} -n swap system
+  lvcreate -l ${disk_pct_of_free_home}%FREE -n home system
 
   # FORMAT THE PARTITIONS
 
@@ -670,7 +667,7 @@ echo "hello"
   mount /dev/mapper/system-home $my_root_mount/home
 
   # Install base packages. "-K" tells pacstrap to generate a new pacman master key
-  pacstrap $my_root_mount "${pacstrap_pkgs[@]}"
+  pacstrap $my_root_mount "${pacstrap_pkgs[@]}" "$cpu_firmware" "$hypervisor_pkgs"
 
   # Generate the File System TABle (fstab) using UUID numbers
   genfstab -U $my_root_mount >> $my_root_mount/etc/fstab
@@ -707,9 +704,6 @@ echo "hello"
     echo -e '127.0.1.1\tarch.localdomain\tarch'
   } >> $my_root_mount/etc/hosts
 
-  # Set a password for root
-  # arch-chroot $my_root_mount echo root:change-me | chpasswd
-
   # Enable color output for pacman and specify the number of parallel downloads
   arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
 
@@ -722,6 +716,7 @@ echo "hello"
     set -e
 
     # Install GRUB
+    vgchange -ay
     grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 
     # Configure GRUB the first time to ensure entries are created for both the normal and LTS kernels
@@ -798,6 +793,8 @@ CHROOT_EOF
   arch-chroot $my_root_mount systemctl enable grub-btrfsd
   arch-chroot $my_root_mount systemctl enable snapper-boot.timer
 
+  read -rp "Press [Enter] to continue..."
+
   # Allow root to have ssh access initially for troubleshooting while developing
   arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
@@ -852,7 +849,9 @@ CHROOT_EOF
 
   # Create a directory for AppImages
   arch-chroot $my_root_mount mkdir /home/$my_user_id/AppImages/
-
+  
+  read -rp "Press [Enter] to continue..."
+  
   clear
   # Copy this script to the root home directory
   cp install.sh $my_root_mount/root/Scripts
