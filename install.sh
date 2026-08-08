@@ -516,6 +516,7 @@ main() {
   readonly disk_pct_of_free_root=40
   readonly disk_size_swap=8G
   readonly disk_pct_of_free_home=100
+  readonly my_shell="/usr/bin/bash"
   
   check_for_root
   configure_pacman_preinstall "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
@@ -716,7 +717,7 @@ main() {
     set -e
 
     # Install GRUB
-    vgchange -ay
+
     grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 
     # Configure GRUB the first time to ensure entries are created for both the normal and LTS kernels
@@ -767,7 +768,7 @@ CHROOT_EOF
   arch-chroot $my_root_mount mkinitcpio -p linux
 
   # Add a user account
-  arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s /usr/bin/zsh -p "$my_password_hash" $my_user_id
+  arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s $my_shell -p "$my_password_hash" $my_user_id
 
   # ToDo: Clean this section up
   # Install KDE Plasma and sddm
