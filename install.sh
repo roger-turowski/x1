@@ -418,31 +418,12 @@ build_partition_paths() {
   out_root="${prefix}2"
   printf 'Partition paths built:\nDisk: %s\nEFI:  %s\nRoot: %s\n' "$out_disk" "$out_efi" "$out_root" >&2
 }
-# =============================================================================
-# main script execution starts here
-# =============================================================================
-
-main() {
-echo "hello"
-
-  local my_disk=""
-  local my_partition_efi=""
-  local my_partition_root=""
-
-  check_for_root
-  configure_pacman_preinstall "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
-  install_preinstall_pkgs "${preinstall_pkgs[@]}"
-
-  if ! install_disk=$(get_install_disk); then
-    printf 'No disk selected. Exiting.\n' >&2
-    exit 1
-  fi
-
-  build_partition_paths "$install_disk" my_disk my_partition_efi my_partition_root
-
+make_password_hash() {
   # Make a password hash here with mkpasswd and assign to my_password_hash at runtime
   # Generate a salt for the password hash
   # my_salt=$(tr -dc '0-9a-zA-Z' < /dev/urandom | head -c 16)
+  local my_salt
+  
   my_salt=$(tr -dc '0-9a-zA-Z' </dev/urandom | head -c16 || true)
 
   echo "Create a password for $my_user_id"
@@ -459,6 +440,31 @@ echo "hello"
       error_result "Password not confirmed"
       ;;
   esac
+  printf 'Password hash generated: %s for user %s\n' "$my_password_hash" "$my_user_id" >&2
+}
+# =============================================================================
+# main script execution starts here
+# =============================================================================
+
+main() {
+echo "hello"
+
+  local my_disk=""
+  local my_partition_efi=""
+  local my_partition_root=""
+  local my_password_hash=""
+
+  check_for_root
+  configure_pacman_preinstall "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
+  install_preinstall_pkgs "${preinstall_pkgs[@]}"
+
+  if ! install_disk=$(get_install_disk); then
+    printf 'No disk selected. Exiting.\n' >&2
+    exit 1
+  fi
+
+  build_partition_paths "$install_disk" my_disk my_partition_efi my_partition_root
+  make_password_hash  my_password_hash
 
   # Detect the CPU type to install appropriate firmware
   if (grep -m 1 "GenuineIntel" "/proc/cpuinfo"); then
