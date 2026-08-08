@@ -396,453 +396,471 @@ get_install_disk() {
     no )  log_error "Cancelled by user to preserve the current disk layout.";;
     * )   log_error "Unable to proceed due to an invalid response";;
   esac
+  printf 'Install disk selected is: %s\n' "${response}" >&2
   printf '%s\n' "$response"
+}
+build_partition_paths() {
+  local disk="$1"
+  local -n out_disk="$2"
+  local -n out_efi="$3"
+  local -n out_root="$4"
+
+  # Normalize disk path
+  [[ "$disk" != /dev/* ]] && disk="/dev/${disk}"
+
+  # NVMe uses 'p' before partition number: /dev/nvme0n1p1
+  # SATA/SCSI does not: /dev/sda1
+  local prefix="$disk"
+  [[ "$disk" =~ nvme ]] || [[ "$disk" =~ mmc ]] && prefix="${disk}p"
+
+  out_disk="$disk"
+  out_efi="${prefix}1"
+  out_root="${prefix}2"
+  printf 'Partition paths built:\nDisk: %s\nEFI:  %s\nRoot: %s\n' "$out_disk" "$out_efi" "$out_root" >&2
 }
 # =============================================================================
 # main script execution starts here
 # =============================================================================
-check_for_root
-configure_pacman_preinstall "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
-install_preinstall_pkgs "${preinstall_pkgs[@]}"
 
-if ! install_disk=$(get_install_disk); then
-  printf 'No disk selected. Exiting.\n' >&2
-  exit 1
-fi
-echo "Install disk selected is: ${install_disk}"
+main() {
+echo "hello"
 
-if [[ "$install_disk" =~ ^nvme[0-3]n[0-3]$ ]]; then
-  echo "Installing to nvme disk $install_disk"
-  my_disk="/dev/$install_disk"
-  my_partition_efi="/dev/${install_disk}p1"
-  my_partition_root="/dev/${install_disk}p2"
-elif [[ "$install_disk" =~ ^sd[a-z]$ ]]; then
-  echo "Installing to SATA disk $install_disk"
-  my_disk="/dev/$install_disk"
-  my_partition_efi="/dev/${install_disk}1"
-  my_partition_root="/dev/${install_disk}2"
-  echo "my_disk: $my_disk"
-  echo "my_partition_efi: $my_partition_efi"
-  echo "my_partition_root: $my_partition_root"
-else
-  error_result "Invalid disk was selected: $install_disk"
-fi
+  local my_disk=""
+  local my_partition_efi=""
+  local my_partition_root=""
 
-# Make a password hash here with mkpasswd and assign to my_password_hash at runtime
-# Generate a salt for the password hash
-# my_salt=$(tr -dc '0-9a-zA-Z' < /dev/urandom | head -c 16)
-my_salt=$(tr -dc '0-9a-zA-Z' </dev/urandom | head -c16 || true)
+  check_for_root
+  configure_pacman_preinstall "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
+  install_preinstall_pkgs "${preinstall_pkgs[@]}"
 
-echo "Create a password for $my_user_id"
-my_password_hash=$(mkpasswd -m sha-512 --salt="$my_salt")
+  if ! install_disk=$(get_install_disk); then
+    printf 'No disk selected. Exiting.\n' >&2
+    exit 1
+  fi
 
-echo "Enter the password again to confirm"
-my_password_hash_confirmed=$(mkpasswd -m sha-512 --salt="$my_salt")
+  build_partition_paths "$install_disk" my_disk my_partition_efi my_partition_root
 
-case $my_password_hash in
-	"$my_password_hash_confirmed")
-		ok_result "Password confirmed"
-		;;
-	*)
-		error_result "Password not confirmed"
-		;;
-esac
+  # Make a password hash here with mkpasswd and assign to my_password_hash at runtime
+  # Generate a salt for the password hash
+  # my_salt=$(tr -dc '0-9a-zA-Z' < /dev/urandom | head -c 16)
+  my_salt=$(tr -dc '0-9a-zA-Z' </dev/urandom | head -c16 || true)
 
-# Detect the CPU type to install appropriate firmware
-if (grep -m 1 "GenuineIntel" "/proc/cpuinfo"); then
-  cpu_firmware="intel-ucode"
-  ok_result "Intel CPU was found"
-  pacstrap_pkgs+=("$cpu_firmware")
-elif (grep -m 1 "AuthenticAMD" "/proc/cpuinfo"); then
-  cpu_firmware="amd-ucode"
-  ok_result "AMD CPU was found"
-  pacstrap_pkgs+=("$cpu_firmware")
-else
-  info_result "No CPU micro-code is available for this CPU."
-fi
+  echo "Create a password for $my_user_id"
+  my_password_hash=$(mkpasswd -m sha-512 --salt="$my_salt")
 
-# Detect if running on a hypervisor and install the correct additions
-if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
-  info_result "Hypervisor is detected"
-  my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -c 16-)
-  my_hypervisor_product=$(dmidecode -t system | grep 'Product' | cut -c 16-)
-  info_result "Hypervisor Manufacturer is: $my_hypervisor_manufacturer"
-  info_result "Hypervisor Product is: $my_hypervisor_product"
-  case "$my_hypervisor_product" in
-    "VirtualBox")
-      echo "Running on VirtualBox"
-      pacstrap_pkgs+=("virtualbox-guest-utils")
-      ;;
-    "VMware Virtual Platform")
-      echo "Running on VMware"
-      pacstrap_pkgs+=("open-vm-tools")
+  echo "Enter the password again to confirm"
+  my_password_hash_confirmed=$(mkpasswd -m sha-512 --salt="$my_salt")
+
+  case $my_password_hash in
+    "$my_password_hash_confirmed")
+      ok_result "Password confirmed"
       ;;
     *)
-      case "$my_hypervisor_manufacturer" in
-        "VMware, Inc.")
-          echo "Running on VMware"
-          pacstrap_pkgs+=("open-vm-tools")
-          ;;
-        "QEMU")
-          echo "Running on QEMU"
-          pacstrap_pkgs+=("qemu-guest-agent")
-          ;;
-        *)
-          echo "Running on unknown hypervisor"
-          ;;
-      esac
+      error_result "Password not confirmed"
+      ;;
   esac
-fi
 
-# Configure keyboard
-localectl set-keymap us
+  # Detect the CPU type to install appropriate firmware
+  if (grep -m 1 "GenuineIntel" "/proc/cpuinfo"); then
+    cpu_firmware="intel-ucode"
+    ok_result "Intel CPU was found"
+    pacstrap_pkgs+=("$cpu_firmware")
+  elif (grep -m 1 "AuthenticAMD" "/proc/cpuinfo"); then
+    cpu_firmware="amd-ucode"
+    ok_result "AMD CPU was found"
+    pacstrap_pkgs+=("$cpu_firmware")
+  else
+    info_result "No CPU micro-code is available for this CPU."
+  fi
+
+  # Detect if running on a hypervisor and install the correct additions
+  if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
+    info_result "Hypervisor is detected"
+    my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -c 16-)
+    my_hypervisor_product=$(dmidecode -t system | grep 'Product' | cut -c 16-)
+    info_result "Hypervisor Manufacturer is: $my_hypervisor_manufacturer"
+    info_result "Hypervisor Product is: $my_hypervisor_product"
+    case "$my_hypervisor_product" in
+      "VirtualBox")
+        echo "Running on VirtualBox"
+        pacstrap_pkgs+=("virtualbox-guest-utils")
+        ;;
+      "VMware Virtual Platform")
+        echo "Running on VMware"
+        pacstrap_pkgs+=("open-vm-tools")
+        ;;
+      *)
+        case "$my_hypervisor_manufacturer" in
+          "VMware, Inc.")
+            echo "Running on VMware"
+            pacstrap_pkgs+=("open-vm-tools")
+            ;;
+          "QEMU")
+            echo "Running on QEMU"
+            pacstrap_pkgs+=("qemu-guest-agent")
+            ;;
+          *)
+            echo "Running on unknown hypervisor"
+            ;;
+        esac
+    esac
+  fi
+
+  # Configure keyboard
+  localectl set-keymap us
+
+  # Set-up Wi-Fi connection example:
+  # iwctl adapter list
+  # iwctl station wlan0 get-networks
+  # iwbtl station wlan0 connect <network_name>
+  # ip a
+  # ping -c 4 archlinux.org
+
+  # Set the time zone
+  timedatectl set-timezone $my_timezone
+
+  # Configure ntp
+  timedatectl set-ntp true
+  timedatectl status
+
+  # Set-up the fastest Arch mirrors
+  reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --save /etc/pacman.d/mirrorlist
+
+  # Clear the disk
+  # Deactivate ALL volume groups
+  # vgchange -an
+
+  teardown_existing_mappings "$my_disk"
+
+  # Removes all active device mapper devices
+  dmsetup remove_all
+
+  # Stop RAID arrays (if any)
+  mdadm --stop --scan
+
+  # 1. Aggressively wipe all signatures (filesystem, raid, partition table)
+  # wipefs --all --force "$my_disk"
+  wipe_disk_signatures "$my_disk"
+
+  # 2. Destroy GPT headers (Primary AND Backup) explicitly
+  # sgdisk --zap-all "$my_disk"
+
+  # 3. Force the kernel to drop the device and re-scan
+  # This simulates unplugging/replugging the drive without rebooting
+  # echo 1 > /sys/block/sda/device/delete
+  # echo "- - -" > /sys/class/scsi_host/host0/scan 
+  # NOTE: Replace 'host0' with your actual host number found via: ls /sys/class/scsi_host/
+
+  # Clean the ssd disk using blkdiscard
+  # Found blkdiscard fails on VMware guest disks
+  #blkdiscard "$my_disk"
+
+  # Inform the OS of partition table changes
+  partprobe "$my_disk"
+
+  # PHYSICAL PARTITIONS
+
+  # Create the physical EFI partition
+  sgdisk --new=1:0:+4G --typecode=1:ef00 --change-name=1:EFI "$my_disk"
 
-# Set-up Wi-Fi connection example:
-# iwctl adapter list
-# iwctl station wlan0 get-networks
-# iwbtl station wlan0 connect <network_name>
-# ip a
-# ping -c 4 archlinux.org
+  # Create the physical partition for root, swap and home
+  sgdisk --new=2:0:0 --typecode=2:8e00 --change-name=2:root "$my_disk"
 
-# Set the time zone
-timedatectl set-timezone $my_timezone
+  # Display a disk summary
+  partprobe -s "$my_disk"
 
-# Configure ntp
-timedatectl set-ntp true
-timedatectl status
+  # PHYSICAL VOLUMES
 
-# Set-up the fastest Arch mirrors
-reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --save /etc/pacman.d/mirrorlist
+  # Create a physical volume to contain the volume group "system"
+  pvcreate -ff "$my_partition_root"
 
-# Clear the disk
-# Deactivate ALL volume groups
-# vgchange -an
+  # VOLUME GROUPS
 
-teardown_existing_mappings "$my_disk"
+  # Create the volume group for root, swap and home
+  vgcreate system "$my_partition_root"
 
-# Removes all active device mapper devices
-dmsetup remove_all
+  # LOGICAL VOLUMES 
 
-# Stop RAID arrays (if any)
-mdadm --stop --scan
+  # Create the logical volumes for root, swap and home
+  lvcreate -l 40%FREE -n root system
+  lvcreate -L 8G -n swap system
+  lvcreate -l 100%FREE -n home system
 
-# 1. Aggressively wipe all signatures (filesystem, raid, partition table)
-# wipefs --all --force "$my_disk"
-wipe_disk_signatures "$my_disk"
+  # FORMAT THE PARTITIONS
 
-# 2. Destroy GPT headers (Primary AND Backup) explicitly
-# sgdisk --zap-all "$my_disk"
+  # Format the EFI partition
+  mkfs.fat -n EFI -F32 "$my_partition_efi"
 
-# 3. Force the kernel to drop the device and re-scan
-# This simulates unplugging/replugging the drive without rebooting
-# echo 1 > /sys/block/sda/device/delete
-# echo "- - -" > /sys/class/scsi_host/host0/scan 
-# NOTE: Replace 'host0' with your actual host number found via: ls /sys/class/scsi_host/
+  # Format the root volume with BTRFS
+  mkfs.btrfs -f -L root /dev/system/root
 
-# Clean the ssd disk using blkdiscard
-# Found blkdiscard fails on VMware guest disks
-#blkdiscard "$my_disk"
+  # Format the home volume with xfs
+  mkfs.xfs -f -L home /dev/system/home
 
-# Inform the OS of partition table changes
-partprobe "$my_disk"
+  # Create swap space
+  wipefs --all --force /dev/system/swap
+  mkswap -L swap /dev/system/swap
+  swapon /dev/system/swap
 
-# PHYSICAL PARTITIONS
+  # BTRFS SUBVOLUMES
+  # Notes:
+  # Format, then mount, create subvolumes, unmount, create subvolume
+  # directories, create subvolumes, unmount, re-mount with options (Correct?)
 
-# Create the physical EFI partition
-sgdisk --new=1:0:+4G --typecode=1:ef00 --change-name=1:EFI "$my_disk"
+  # Create separate BTRFS subvolumes that do not snapshot
 
-# Create the physical partition for root, swap and home
-sgdisk --new=2:0:0 --typecode=2:8e00 --change-name=2:root "$my_disk"
+  mount /dev/mapper/system-root $my_root_mount
 
-# Display a disk summary
-partprobe -s "$my_disk"
+  btrfs subvolume create $my_root_mount/@
 
-# PHYSICAL VOLUMES
+  mkdir $my_root_mount/.snapshots
+  btrfs subvolume create $my_root_mount/@/.snapshots
 
-# Create a physical volume to contain the volume group "system"
-pvcreate -ff "$my_partition_root"
+  mkdir -p $my_root_mount/boot/grub2/i386-pc
+  btrfs subvolume create -p $my_root_mount/@/boot/grub2/i386-pc
 
-# VOLUME GROUPS
+  mkdir -p $my_root_mount/boot/grub2/x86_64-efi
+  btrfs subvolume create -p $my_root_mount/@/boot/grub2/x86_64-efi
 
-# Create the volume group for root, swap and home
-vgcreate system "$my_partition_root"
+  mkdir $my_root_mount/opt
+  btrfs subvolume create $my_root_mount/@/opt
 
-# LOGICAL VOLUMES 
+  mkdir $my_root_mount/root
+  btrfs subvolume create $my_root_mount/@/root
 
-# Create the logical volumes for root, swap and home
-lvcreate -l 40%FREE -n root system
-lvcreate -L 8G -n swap system
-lvcreate -l 100%FREE -n home system
+  mkdir $my_root_mount/srv
+  btrfs subvolume create $my_root_mount/@/srv
 
-# FORMAT THE PARTITIONS
+  mkdir $my_root_mount/tmp
+  btrfs subvolume create $my_root_mount/@/tmp
 
-# Format the EFI partition
-mkfs.fat -n EFI -F32 "$my_partition_efi"
+  mkdir -p $my_root_mount/usr/local
+  btrfs subvolume create -p $my_root_mount/@/usr/local
 
-# Format the root volume with BTRFS
-mkfs.btrfs -f -L root /dev/system/root
+  mkdir $my_root_mount/var
+  btrfs subvolume create $my_root_mount/@/var
+  chattr +C $my_root_mount/@/var
 
-# Format the home volume with xfs
-mkfs.xfs -f -L home /dev/system/home
+  umount $my_root_mount
 
-# Create swap space
-wipefs --all --force /dev/system/swap
-mkswap -L swap /dev/system/swap
-swapon /dev/system/swap
+  # Options used for all mounts utilizing an SSD
+  mount /dev/mapper/system-root $my_root_mount -o subvol=@,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/.snapshots -o subvol=@/.snapshots,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/boot/grub2/i386-pc -o subvol=@/boot/grub2/i386-pc,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/boot/grub2/x86_64-efi -o subvol=@/boot/grub2/x86_64-efi,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/opt -o subvol=@/opt,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/root -o subvol=@/root,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/srv -o subvol=@/srv,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/tmp -o subvol=@/tmp,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/usr/local -o subvol=@/usr/local,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/var -o subvol=@/var,$MOUNTOPTS
 
-# BTRFS SUBVOLUMES
-# Notes:
-# Format, then mount, create subvolumes, unmount, create subvolume
-# directories, create subvolumes, unmount, re-mount with options (Correct?)
+  # Mount the EFI partition
+  mkdir -p $my_root_mount/boot/efi
+  mount "$my_partition_efi" "$my_root_mount/boot/efi"
 
-# Create separate BTRFS subvolumes that do not snapshot
+  # Mount the home partition
+  mkdir -p $my_root_mount/home
+  mount /dev/mapper/system-home $my_root_mount/home
 
-mount /dev/mapper/system-root $my_root_mount
+  # Install base packages. "-K" tells pacstrap to generate a new pacman master key
+  pacstrap $my_root_mount "${pacstrap_pkgs[@]}"
 
-btrfs subvolume create $my_root_mount/@
+  # Generate the File System TABle (fstab) using UUID numbers
+  genfstab -U $my_root_mount >> $my_root_mount/etc/fstab
 
-mkdir $my_root_mount/.snapshots
-btrfs subvolume create $my_root_mount/@/.snapshots
+  # Begin arch-chroot operations
 
-mkdir -p $my_root_mount/boot/grub2/i386-pc
-btrfs subvolume create -p $my_root_mount/@/boot/grub2/i386-pc
+  # Set-up the Time Zone
+  arch-chroot $my_root_mount ln -sf /usr/share/zoneinfo/America/Detroit /etc/localtime
 
-mkdir -p $my_root_mount/boot/grub2/x86_64-efi
-btrfs subvolume create -p $my_root_mount/@/boot/grub2/x86_64-efi
+  # Sync the Sytem Clock to the Hardware Clock
+  arch-chroot $my_root_mount hwclock --systohc
 
-mkdir $my_root_mount/opt
-btrfs subvolume create $my_root_mount/@/opt
+  # Generate the locale
+  arch-chroot $my_root_mount sed -i '/^#en_US.UTF-8 UTF-8/s/^#//' /etc/locale.gen
+  arch-chroot $my_root_mount locale-gen
+  echo "LANG=en_US.UTF-8" >> $my_root_mount/etc/locale.conf
 
-mkdir $my_root_mount/root
-btrfs subvolume create $my_root_mount/@/root
+  # Configure keyboard mapping (Copied from OpenSUSE Tumbleweed)
+  { echo 'KEYMAP=us';
+    echo 'FONT=eurlatgr';
+    echo 'FONT_MAP=';
+    echo 'FONT_UNIMAP=';
+    echo 'XKBLAYOUT=us';
+    echo 'XKBMODEL=pc105+inet';
+    echo 'XKBOPTIONS=terminate:ctrl_alt_bksp';
+  } >> $my_root_mount/etc/vconsole.conf
 
-mkdir $my_root_mount/srv
-btrfs subvolume create $my_root_mount/@/srv
+  # Configure the Host Name
+  echo -e $my_host_name >> $my_root_mount/etc/hostname
 
-mkdir $my_root_mount/tmp
-btrfs subvolume create $my_root_mount/@/tmp
+  # Build the hosts file
+  { echo -e '127.0.0.1\tlocalhost';
+    echo -e '::1\t\tlocalhost';
+    echo -e '127.0.1.1\tarch.localdomain\tarch'
+  } >> $my_root_mount/etc/hosts
 
-mkdir -p $my_root_mount/usr/local
-btrfs subvolume create -p $my_root_mount/@/usr/local
+  # Set a password for root
+  # arch-chroot $my_root_mount echo root:change-me | chpasswd
 
-mkdir $my_root_mount/var
-btrfs subvolume create $my_root_mount/@/var
-chattr +C $my_root_mount/@/var
+  # Enable color output for pacman and specify the number of parallel downloads
+  arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
 
-umount $my_root_mount
+  # Install the gui packages
+  arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
 
-# Options used for all mounts utilizing an SSD
-mount /dev/mapper/system-root $my_root_mount -o subvol=@,$MOUNTOPTS
-mount /dev/mapper/system-root $my_root_mount/.snapshots -o subvol=@/.snapshots,$MOUNTOPTS
-mount /dev/mapper/system-root $my_root_mount/boot/grub2/i386-pc -o subvol=@/boot/grub2/i386-pc,$MOUNTOPTS
-mount /dev/mapper/system-root $my_root_mount/boot/grub2/x86_64-efi -o subvol=@/boot/grub2/x86_64-efi,$MOUNTOPTS
-mount /dev/mapper/system-root $my_root_mount/opt -o subvol=@/opt,$MOUNTOPTS
-mount /dev/mapper/system-root $my_root_mount/root -o subvol=@/root,$MOUNTOPTS
-mount /dev/mapper/system-root $my_root_mount/srv -o subvol=@/srv,$MOUNTOPTS
-mount /dev/mapper/system-root $my_root_mount/tmp -o subvol=@/tmp,$MOUNTOPTS
-mount /dev/mapper/system-root $my_root_mount/usr/local -o subvol=@/usr/local,$MOUNTOPTS
-mount /dev/mapper/system-root $my_root_mount/var -o subvol=@/var,$MOUNTOPTS
+  # Install and configure GRUB for normal and LTS kernels
+  arch-chroot /mnt /usr/bin/env bash << 'CHROOT_EOF'
+    export LANG=C
+    set -e
 
-# Mount the EFI partition
-mkdir -p $my_root_mount/boot/efi
-mount "$my_partition_efi" "$my_root_mount/boot/efi"
+    # Install GRUB
+    grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 
-# Mount the home partition
-mkdir -p $my_root_mount/home
-mount /dev/mapper/system-home $my_root_mount/home
+    # Configure GRUB the first time to ensure entries are created for both the normal and LTS kernels
+    grub-mkconfig -o /boot/grub/grub.cfg
 
-# Install base packages. "-K" tells pacstrap to generate a new pacman master key
-pacstrap $my_root_mount "${pacstrap_pkgs[@]}"
+    # Extract submenu and entry IDs (sed-based, no PCRE needed)
+    SUBMENU_ID=$(grep "^submenu" /boot/grub/grub.cfg | head -1 | sed -n "s/.*menuentry_id_option '\([^']*\)'.*/\1/p")
+    ENTRY_ID=$(grep "menuentry .*with Linux linux'" /boot/grub/grub.cfg | head -1 | sed -n "s/.*menuentry_id_option '\([^']*\)'.*/\1/p")
 
-# Generate the File System TABle (fstab) using UUID numbers
-genfstab -U $my_root_mount >> $my_root_mount/etc/fstab
+    # Apply GRUB_DEFAULT
+    sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"${SUBMENU_ID}>${ENTRY_ID}\"/" /etc/default/grub
+    
+    # Configure custom GRUB colors
+    sed -i 's/^#GRUB_COLOR_NORMAL=.*/GRUB_COLOR_NORMAL="cyan\/blue"/' /etc/default/grub
+    sed -i 's/^#GRUB_COLOR_HIGHLIGHT=.*/GRUB_COLOR_HIGHLIGHT="light-cyan\/black"/' /etc/default/grub 
+    
+    # Rebuild GRUB configuration to apply the new default entry
+    grub-mkconfig -o /boot/grub/grub.cfg
 
-# Begin arch-chroot operations
-
-# Set-up the Time Zone
-arch-chroot $my_root_mount ln -sf /usr/share/zoneinfo/America/Detroit /etc/localtime
-
-# Sync the Sytem Clock to the Hardware Clock
-arch-chroot $my_root_mount hwclock --systohc
-
-# Generate the locale
-arch-chroot $my_root_mount sed -i '/^#en_US.UTF-8 UTF-8/s/^#//' /etc/locale.gen
-arch-chroot $my_root_mount locale-gen
-echo "LANG=en_US.UTF-8" >> $my_root_mount/etc/locale.conf
-
-# Configure keyboard mapping (Copied from OpenSUSE Tumbleweed)
-{ echo 'KEYMAP=us';
-  echo 'FONT=eurlatgr';
-  echo 'FONT_MAP=';
-  echo 'FONT_UNIMAP=';
-  echo 'XKBLAYOUT=us';
-  echo 'XKBMODEL=pc105+inet';
-  echo 'XKBOPTIONS=terminate:ctrl_alt_bksp';
-} >> $my_root_mount/etc/vconsole.conf
-
-# Configure the Host Name
-echo -e $my_host_name >> $my_root_mount/etc/hostname
-
-# Build the hosts file
-{ echo -e '127.0.0.1\tlocalhost';
-  echo -e '::1\t\tlocalhost';
-  echo -e '127.0.1.1\tarch.localdomain\tarch'
-} >> $my_root_mount/etc/hosts
-
-# Set a password for root
-# arch-chroot $my_root_mount echo root:change-me | chpasswd
-
-# Enable color output for pacman and specify the number of parallel downloads
-arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
-
-# Install the gui packages
-arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
-
-# Install and configure GRUB for normal and LTS kernels
-arch-chroot /mnt /usr/bin/env bash << 'CHROOT_EOF'
-  export LANG=C
-  set -e
-
-  # Install GRUB
-  grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
-
-  # Configure GRUB the first time to ensure entries are created for both the normal and LTS kernels
-  grub-mkconfig -o /boot/grub/grub.cfg
-
-  # Extract submenu and entry IDs (sed-based, no PCRE needed)
-  SUBMENU_ID=$(grep "^submenu" /boot/grub/grub.cfg | head -1 | sed -n "s/.*menuentry_id_option '\([^']*\)'.*/\1/p")
-  ENTRY_ID=$(grep "menuentry .*with Linux linux'" /boot/grub/grub.cfg | head -1 | sed -n "s/.*menuentry_id_option '\([^']*\)'.*/\1/p")
-
-  # Apply GRUB_DEFAULT
-  sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"${SUBMENU_ID}>${ENTRY_ID}\"/" /etc/default/grub
-  
-  # Configure custom GRUB colors
-  sed -i 's/^#GRUB_COLOR_NORMAL=.*/GRUB_COLOR_NORMAL="cyan\/blue"/' /etc/default/grub
-  sed -i 's/^#GRUB_COLOR_HIGHLIGHT=.*/GRUB_COLOR_HIGHLIGHT="light-cyan\/black"/' /etc/default/grub 
-  
-  # Rebuild GRUB configuration to apply the new default entry
-  grub-mkconfig -o /boot/grub/grub.cfg
-
-  echo "Done. GRUB_DEFAULT=${SUBMENU_ID}>${ENTRY_ID}"
+    echo "Done. GRUB_DEFAULT=${SUBMENU_ID}>${ENTRY_ID}"
 CHROOT_EOF
 
-# ToDo: Optimize this section
-# Enable Services
-arch-chroot $my_root_mount systemctl enable NetworkManager \
-  bluetooth \
-  cups.service \
-  sshd \
-  avahi-daemon \
-  tlp \
-  reflector.timer \
-  fstrim.timer \
-  firewalld \
-  acpid
+  # ToDo: Optimize this section
+  # Enable Services
+  arch-chroot $my_root_mount systemctl enable NetworkManager \
+    bluetooth \
+    cups.service \
+    sshd \
+    avahi-daemon \
+    tlp \
+    reflector.timer \
+    fstrim.timer \
+    firewalld \
+    acpid
 
-# Make wheel group sudo enabled
-SUDOER_TMP=$(mktemp)
-cat $my_root_mount/etc/sudoers > "$SUDOER_TMP"
-sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP"
-visudo -c -f "$SUDOER_TMP" && cat "$SUDOER_TMP" > "$my_root_mount/etc/sudoers"
-rm "$SUDOER_TMP"
+  # Make wheel group sudo enabled
+  SUDOER_TMP=$(mktemp)
+  cat $my_root_mount/etc/sudoers > "$SUDOER_TMP"
+  sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP"
+  visudo -c -f "$SUDOER_TMP" && cat "$SUDOER_TMP" > "$my_root_mount/etc/sudoers"
+  rm "$SUDOER_TMP"
 
-# Update mkinitcpio.conf
-arch-chroot $my_root_mount sed -i \
-  -e 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf \
-  -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs/' \
-  /etc/mkinitcpio.conf
-arch-chroot $my_root_mount mkinitcpio -p linux
+  # Update mkinitcpio.conf
+  arch-chroot $my_root_mount sed -i \
+    -e 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf \
+    -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs/' \
+    /etc/mkinitcpio.conf
+  arch-chroot $my_root_mount mkinitcpio -p linux
 
-# Add a user account
-arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s /usr/bin/zsh -p "$my_password_hash" $my_user_id
+  # Add a user account
+  arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s /usr/bin/zsh -p "$my_password_hash" $my_user_id
 
-# ToDo: Clean this section up
-# Install KDE Plasma and sddm
-arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm
-arch-chroot $my_root_mount pacman -S --needed --noconfirm plasma kde-applications
-arch-chroot $my_root_mount systemctl enable sddm
+  # ToDo: Clean this section up
+  # Install KDE Plasma and sddm
+  arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm
+  arch-chroot $my_root_mount pacman -S --needed --noconfirm plasma kde-applications
+  arch-chroot $my_root_mount systemctl enable sddm
 
-# Apply the Breeze theme to sddm
-mkdir $my_root_mount/etc/sddm.conf.d/
-arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
+  # Apply the Breeze theme to sddm
+  mkdir $my_root_mount/etc/sddm.conf.d/
+  arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
-# Install snapper
-arch-chroot $my_root_mount pacman -S --noconfirm snapper snap-pac inotify-tools
-#arch-chroot $my_root_mount btrfs subvolume delete /.snapshots/
-#arch-chroot $my_root_mount snapper -c root create-config /
-#arch-chroot $my_root_mount snapper list-configs
-#arch-chroot $my_root_mount snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes
-#arch-chroot $my_root_mount sed -i 's/PRUNENAMES = ".git .hg .svn"/PRUNENAMES = ".git .hg .svn .snapshots"/' /etc/updatedb.conf
+  # Install snapper
+  arch-chroot $my_root_mount pacman -S --noconfirm snapper snap-pac inotify-tools
+  #arch-chroot $my_root_mount btrfs subvolume delete /.snapshots/
+  #arch-chroot $my_root_mount snapper -c root create-config /
+  #arch-chroot $my_root_mount snapper list-configs
+  #arch-chroot $my_root_mount snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes
+  #arch-chroot $my_root_mount sed -i 's/PRUNENAMES = ".git .hg .svn"/PRUNENAMES = ".git .hg .svn .snapshots"/' /etc/updatedb.conf
 
-# Configure GRUB for snapshot recovery
-arch-chroot $my_root_mount sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
-arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
-arch-chroot $my_root_mount systemctl enable grub-btrfsd
-arch-chroot $my_root_mount systemctl enable snapper-boot.timer
+  # Configure GRUB for snapshot recovery
+  arch-chroot $my_root_mount sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
+  arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
+  arch-chroot $my_root_mount systemctl enable grub-btrfsd
+  arch-chroot $my_root_mount systemctl enable snapper-boot.timer
 
-# Allow root to have ssh access initially for troubleshooting while developing
-arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+  # Allow root to have ssh access initially for troubleshooting while developing
+  arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
-# Create post-install scripts for root
-mkdir $my_root_mount/root/Scripts
-arch-chroot $my_root_mount touch /root/Scripts/enable_snapper_snapshots.sh
-arch-chroot $my_root_mount chmod +x /root/Scripts/enable_snapper_snapshots.sh
-{ echo -e '#!/usr/bin/bash';
-  echo -e 'btrfs subvolume delete /.snapshots/';
-  echo -e 'snapper -c root create-config /';
-  echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
-  echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
-  echo -e 'snapper list-configs';
-} >> $my_root_mount/root/Scripts/enable_snapper_snapshots.sh
+  # Create post-install scripts for root
+  mkdir $my_root_mount/root/Scripts
+  arch-chroot $my_root_mount touch /root/Scripts/enable_snapper_snapshots.sh
+  arch-chroot $my_root_mount chmod +x /root/Scripts/enable_snapper_snapshots.sh
+  { echo -e '#!/usr/bin/bash';
+    echo -e 'btrfs subvolume delete /.snapshots/';
+    echo -e 'snapper -c root create-config /';
+    echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
+    echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
+    echo -e 'snapper list-configs';
+  } >> $my_root_mount/root/Scripts/enable_snapper_snapshots.sh
 
-# Create post install scripts for $my_user_id
-arch-chroot $my_root_mount mkdir /home/$my_user_id/Scripts/
-arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/enable_yay.sh
-arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
-{ echo -e '#!/usr/bin/bash';
-  echo -e 'git clone https://aur.archlinux.org/yay.git';
-  echo -e 'pushd yay';
-  echo -e 'makepkg -si';
-  echo -e 'popd';
-  echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
-} >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
+  # Create post install scripts for $my_user_id
+  arch-chroot $my_root_mount mkdir /home/$my_user_id/Scripts/
+  arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/enable_yay.sh
+  arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
+  { echo -e '#!/usr/bin/bash';
+    echo -e 'git clone https://aur.archlinux.org/yay.git';
+    echo -e 'pushd yay';
+    echo -e 'makepkg -si';
+    echo -e 'popd';
+    echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
+  } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
 
-# Enable oh-my-posh in zsh
-echo -e "\neval \"\$(oh-my-posh init zsh)\"" >> "$my_root_mount/home/$my_user_id/.zshrc";
-arch-chroot $my_root_mount chown $my_user_id:$my_user_id /home/$my_user_id/.zshrc
+  # Enable oh-my-posh in zsh
+  echo -e "\neval \"\$(oh-my-posh init zsh)\"" >> "$my_root_mount/home/$my_user_id/.zshrc";
+  arch-chroot $my_root_mount chown $my_user_id:$my_user_id /home/$my_user_id/.zshrc
 
-arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/install_flatpak_apps.sh
-arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/install_flatpak_apps.sh
-{ echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Keypunch
-  echo -e flatpak install -y --noninteractive flathub net.cozic.joplin_desktop
-  echo -e flatpak install -y --noninteractive flathub org.deluge_torrent.deluge
-  echo -e flatpak install -y --noninteractive flathub com.github.sixpounder.GameOfLife
-  echo -e flatpak install -y --noninteractive flathub io.github.giantpinkrobots.flatsweep
-  echo -e flatpak install -y --noninteractive flathub io.github.shiftey.Desktop
-  echo -e flatpak install -y --noninteractive flathub com.sweethome3d.Sweethome3d
-  echo -e flatpak install -y --noninteractive flathub org.kicad.KiCad
-  echo -e flatpak install -y --noninteractive flathub com.obsproject.Studio
-  echo -e flatpak install -y --noninteractive flathub com.github.artemanufrij.regextester
-  echo -e flatpak install -y --noninteractive flathub org.remmina.Remmina
-  echo -e flatpak install -y --noninteractive flathub org.stellarium.Stellarium
-  echo -e flatpak install -y --noninteractive flathub com.adrienplazas.Metronome
-  echo -e flatpak install -y --noninteractive flathub io.github.nokse22.inspector
-  echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Fretboard
-} >> $my_root_mount/home/$my_user_id/Scripts/install_flatpak_apps.sh
+  arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/install_flatpak_apps.sh
+  arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/install_flatpak_apps.sh
+  { echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Keypunch
+    echo -e flatpak install -y --noninteractive flathub net.cozic.joplin_desktop
+    echo -e flatpak install -y --noninteractive flathub org.deluge_torrent.deluge
+    echo -e flatpak install -y --noninteractive flathub com.github.sixpounder.GameOfLife
+    echo -e flatpak install -y --noninteractive flathub io.github.giantpinkrobots.flatsweep
+    echo -e flatpak install -y --noninteractive flathub io.github.shiftey.Desktop
+    echo -e flatpak install -y --noninteractive flathub com.sweethome3d.Sweethome3d
+    echo -e flatpak install -y --noninteractive flathub org.kicad.KiCad
+    echo -e flatpak install -y --noninteractive flathub com.obsproject.Studio
+    echo -e flatpak install -y --noninteractive flathub com.github.artemanufrij.regextester
+    echo -e flatpak install -y --noninteractive flathub org.remmina.Remmina
+    echo -e flatpak install -y --noninteractive flathub org.stellarium.Stellarium
+    echo -e flatpak install -y --noninteractive flathub com.adrienplazas.Metronome
+    echo -e flatpak install -y --noninteractive flathub io.github.nokse22.inspector
+    echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Fretboard
+  } >> $my_root_mount/home/$my_user_id/Scripts/install_flatpak_apps.sh
 
-arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
+  arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
-# Create a directory for AppImages
-arch-chroot $my_root_mount mkdir /home/$my_user_id/AppImages/
+  # Create a directory for AppImages
+  arch-chroot $my_root_mount mkdir /home/$my_user_id/AppImages/
 
-clear
-# Copy this script to the root home directory
-cp install.sh $my_root_mount/root/Scripts
+  clear
+  # Copy this script to the root home directory
+  cp install.sh $my_root_mount/root/Scripts
 
-echo -e "${success_color}Please set a password for the new root account:${no_color}"
-arch-chroot $my_root_mount passwd root
+  echo -e "${success_color}Please set a password for the new root account:${no_color}"
+  arch-chroot $my_root_mount passwd root
 
-sync
-umount $my_root_mount
+  sync
+  umount $my_root_mount
 
-echo Script finished! Please reboot.
+  echo Script finished! Please reboot.
+}
+
+main "$@" || {
+  log_error "Installation failed. Please check the logs for details."
+  exit 1
+}
