@@ -512,11 +512,11 @@ main() {
   local my_password_hash=""
   local cpu_firmware=""
   local hypervisor_pkgs=""
+  local -r my_shell="/usr/bin/bash"
   readonly keyboard_layout="us"
   readonly disk_pct_of_free_root=40
   readonly disk_size_swap=8G
   readonly disk_pct_of_free_home=100
-  readonly my_shell="/usr/bin/bash"
   
   check_for_root
   configure_pacman_preinstall "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
