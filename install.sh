@@ -198,7 +198,7 @@ readonly gui_pkgs=(
 )
 #endregion - Variables
 # =============================================================================
-# Function Definitions
+# region - Function Definitions
 # =============================================================================
 error_result() {
 	# [   OK   ]
@@ -264,9 +264,9 @@ log_debug() {
     [[ "$VERBOSE" == "true" ]] || return 0
     _log "DEBUG" "$@"
 }
-configure_pacman_preinstall() {
+configure_pacman_preinstallation() {
   # =============================================================================
-  # configure_pacman_preinstall
+  # configure_pacman_preinstallation
   # -----------------------------------------------------------------------------
   # Configure color output for pacman and specify number of parallel downloads
   #
@@ -501,7 +501,7 @@ determine_hypervisor_packages() {
     esac
   fi
 }
-configure_time() {
+configure_time_preinstallation() {
   # Configure the time zone and enable NTP
   local timezone="$1"
 
@@ -509,11 +509,213 @@ configure_time() {
   timedatectl set-ntp true
   log_info "Time zone set to $timezone and NTP enabled"
 }
+create_physical_partitions() {
+  local disk="$1"
+  local efi_size="$2"
+  local root_size="$3"
+
+  log_info "Creating physical partitions on $disk"
+  
+  # Create the physical EFI partition
+  sgdisk --new=1:0:+${efi_size} --typecode=1:ef00 --change-name=1:EFI "$disk" || \
+    log_error "Failed to create EFI partition on $disk"
+
+  sgdisk --new=2:0:+${root_size} --typecode=2:8e00 --change-name=2:root "$disk" || \
+    log_error "Failed to create root partition on $disk"
+
+  # Display a disk summary
+  log_info "Disk summary for $my_disk: $(patprobe -s "$my_disk")"
+
+}
+create_volume_group() {
+  local root_partition="$1"
+
+  # Create a volume group named "system" using the root partition
+  vgcreate system "$root_partition"
+}
+create_physical_volumes() {
+  local root_partition="$1"
+
+  log_info "Creating physical volume on $root_partition"
+  # Create a physical volume to contain the volume group "system"
+  pvcreate -ff "$root_partition" || \
+    log_error "Failed to create physical volume on $root_partition"
+}
+create_logical_volumes() {
+  local root_partition="$1"
+  local swap_size="$2"
+  local home_size="$3"
+
+  log_info "Creating logical volumes on $root_partition"
+
+  # Create the logical volumes for root, swap and home
+  lvcreate -l ${disk_pct_of_free_root}%FREE -n root system || \
+    log_error "Failed to create root logical volume"
+  
+  lvcreate -L ${swap_size} -n swap system || \
+    log_error "Failed to create swap logical volume"
+  
+  lvcreate -l ${disk_pct_of_free_home}%FREE -n home system || \
+    log_error "Failed to create home logical volume"
+}
+format_the_partitions() {
+  local my_partition_efi="$1"
+
+  # Format the EFI partition
+  mkfs.fat -n EFI -F32 "$my_partition_efi" || \
+    log_error "Failed to format EFI partition $my_partition_efi"
+
+  # Format the root volume with BTRFS
+  mkfs.btrfs -f -L root /dev/system/root || \
+    log_error "Failed to format root logical volume /dev/system/root"
+
+  # Format the home volume with xfs
+  mkfs.xfs -f -L home /dev/system/home || \
+    log_error "Failed to format home logical volume /dev/system/home"
+
+  # Create swap space
+  wipefs --all --force /dev/system/swap || \
+    log_error "Failed to wipe swap logical volume /dev/system/swap"
+  
+  mkswap -L swap /dev/system/swap || \
+    log_error "Failed to create swap space on /dev/system/swap"
+  
+  swapon /dev/system/swap || \
+    log_error "Failed to enable swap on /dev/system/swap"
+}
+create_btrfs_subvolumes() {
+  local root_mount="$1"
+
+  log_info "Creating BTRFS subvolumes on $root_mount"
+
+  # Mount the root logical volume
+  mount /dev/system/root "$root_mount" || \
+    log_error "Failed to mount root logical volume /dev/system/root to $root_mount"
+
+  # Create BTRFS subvolumes
+  btrfs subvolume create "$root_mount/@"
+  btrfs subvolume create "$root_mount/@/.snapshots"
+  btrfs subvolume create "$root_mount/@/boot/grub2/i386-pc"
+  btrfs subvolume create "$root_mount/@/boot/grub2/x86_64-efi"
+  btrfs subvolume create "$root_mount/@/opt"
+  btrfs subvolume create "$root_mount/@/root"
+  btrfs subvolume create "$root_mount/@/srv"
+  btrfs subvolume create "$root_mount/@/tmp"
+  btrfs subvolume create "$root_mount/@/usr/local"
+  btrfs subvolume create "$root_mount/@/var"
+
+  # Set the No_COW attribute for /var
+  chattr +C "$root_mount/@/var" || \
+    log_error "Failed to set No_COW attribute on $root_mount/@/var"
+
+  # Unmount the root logical volume
+  umount "$root_mount" || \
+    log_error "Failed to unmount root logical volume from $root_mount"
+}
+mount_subvolumes() {
+  local root_mount="$1"
+  local mount_opts="$2"
+
+  # Options used for all mounts utilizing an SSD
+  mount /dev/mapper/system-root $my_root_mount -o subvol=@,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/.snapshots -o subvol=@/.snapshots,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/boot/grub2/i386-pc -o subvol=@/boot/grub2/i386-pc,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/boot/grub2/x86_64-efi -o subvol=@/boot/grub2/x86_64-efi,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/opt -o subvol=@/opt,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/root -o subvol=@/root,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/srv -o subvol=@/srv,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/tmp -o subvol=@/tmp,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/usr/local -o subvol=@/usr/local,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount/var -o subvol=@/var,$MOUNTOPTS
+}
+mount_partitions() {
+  local root_mount="$1"
+  local partition_efi="$2"
+
+  log_info "Mounting partitions to $root_mount"
+
+  # Mount the root logical volume with BTRFS subvolume options
+  mount -o subvol=@,$MOUNTOPTS /dev/system/root "$root_mount" || \
+    log_error "Failed to mount root logical volume /dev/system/root to $root_mount"
+
+  # Mount the EFI partition
+  mkdir -p "$root_mount/boot/efi"
+  mount "$partition_efi" "$root_mount/boot/efi" || \
+    log_error "Failed to mount EFI partition $partition_efi to $root_mount/boot/efi"
+
+  # Mount the home logical volume
+  mkdir -p "$root_mount/home"
+  mount /dev/system/home "$root_mount/home" || \
+    log_error "Failed to mount home logical volume /dev/system/home to $root_mount/home"
+}
+configure_time_and_locale() {
+  local root_mount="$1"
+  local timezone="$2"
+  local hostname="$3"
+
+  arch-chroot "$root_mount" /usr/bin/env bash -s "$timezone" "$hostname" << 'CHROOT_EOF'
+    export LANG=C
+    set -e
+
+    # Lightweight logging inside chroot
+    log_info()  { echo "[INFO] $*"; }
+    log_error() { echo "[ERROR] $*" >&2; exit 1; }
+
+    timezone="$1"
+    hostname="$2"
+
+    log_info "Configuring time and locale in chroot environment"
+
+    # Set the time zone
+    ln -sf "/usr/share/zoneinfo/${timezone}" /etc/localtime || \
+      log_error "Failed to set time zone to ${timezone} in chroot"
+
+    # Sync the system clock to the hardware clock
+    hwclock --systohc || \
+      log_error "Failed to sync system clock to hardware clock in chroot"
+
+    # Generate the locale
+    sed -i '/^#en_US.UTF-8 UTF-8/s/^#//' /etc/locale.gen || \
+      log_error "Failed to uncomment en_US.UTF-8 in /etc/locale.gen in chroot"
+
+    locale-gen || \
+      log_error "Failed to generate locale in chroot"
+
+    echo "LANG=en_US.UTF-8" > "/etc/locale.conf" || \
+      log_error "Failed to write LANG=en_US.UTF-8 to /etc/locale.conf in chroot"
+
+    # Configure keyboard mapping (Copied from OpenSUSE Tumbleweed)
+    { echo 'KEYMAP=us';
+      echo 'FONT=eurlatgr';
+      echo 'FONT_MAP=';
+      echo 'FONT_UNIMAP=';
+      echo 'XKBLAYOUT=us';
+      echo 'XKBMODEL=pc105+inet';
+      echo 'XKBOPTIONS=terminate:ctrl_alt_bksp';
+    } > /etc/vconsole.conf
+
+    # Configure the Host Name
+    echo "${hostname}" > /etc/hostname
+
+    # Build the hosts file
+    { echo -e '127.0.0.1\tlocalhost';
+      echo -e '::1\t\tlocalhost';
+      echo -e '127.0.1.1\tarch.localdomain\tarch';
+    } > /etc/hosts
+
+    # Enable color output for pacman and specify the number of parallel downloads
+    sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
+
+    log_info "Time and locale configuration complete"
+CHROOT_EOF
+}
+# endregion - Function Definitions
 # =============================================================================
 # main script execution starts here
 # =============================================================================
 
 main() {
+  # region - main variables
   local my_disk=""
   local my_partition_efi=""
   local my_partition_root=""
@@ -521,13 +723,17 @@ main() {
   local cpu_firmware=""
   local hypervisor_pkgs=""
   local -r my_shell="/usr/bin/bash"
+  local -r efi_partition_size="4G"
+  local -r root_partition_size="0" # Use all remaining space for root
   readonly keyboard_layout="us"
   readonly disk_pct_of_free_root=40
   readonly disk_size_swap=8G
   readonly disk_pct_of_free_home=100
-  
+
+  # endregion - main variables
+
   check_for_root
-  configure_pacman_preinstall "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
+  configure_pacman_preinstallation "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
   install_preinstall_pkgs "${preinstall_pkgs[@]}"
 
   if ! install_disk=$(get_install_disk); then
@@ -543,7 +749,7 @@ main() {
   # Configure keyboard
   localectl set-keymap ${keyboard_layout}
 
-  configure_time "$my_timezone"
+  configure_time_preinstallation "$my_timezone"
 
   # Set-up the fastest Arch mirrors
   reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --save /etc/pacman.d/mirrorlist
@@ -556,156 +762,25 @@ main() {
   # Stop RAID arrays (if any)
   mdadm --stop --scan
 
-  # 1. Aggressively wipe all signatures (filesystem, raid, partition table)
-  # wipefs --all --force "$my_disk"
-  # wipe_disk_signatures "$my_disk"
+  # Prepare the disk for installation
+  create_physical_partitions "$my_disk" "$efi_partition_size" "$root_partition_size"
+  create_physical_volumes "$my_partition_root"
+  create_volume_group "$my_partition_root"
+  create_logical_volumes "$my_partition_root" "$disk_size_swap" "$disk_pct_of_free_home"
+  format_the_partitions "$my_partition_efi"
+  create_btrfs_subvolumes "$my_root_mount"
+  mount_subvolumes "$my_root_mount" "$MOUNTOPTS"
+  mount_partitions "$my_root_mount" "$my_partition_efi"
 
-  # Inform the OS of partition table changes
-  # partprobe "$my_disk"
-
-  # PHYSICAL PARTITIONS
-
-  # Create the physical EFI partition
-  sgdisk --new=1:0:+4G --typecode=1:ef00 --change-name=1:EFI "$my_disk"
-
-  # Create the physical partition for root, swap and home
-  sgdisk --new=2:0:0 --typecode=2:8e00 --change-name=2:root "$my_disk"
-
-  # Display a disk summary
-  partprobe -s "$my_disk"
-
-  # PHYSICAL VOLUMES
-
-  # Create a physical volume to contain the volume group "system"
-  pvcreate -ff "$my_partition_root"
-
-  # VOLUME GROUPS
-
-  # Create the volume group for root, swap and home
-  vgcreate system "$my_partition_root"
-
-  # LOGICAL VOLUMES 
-
-  # Create the logical volumes for root, swap and home
-  lvcreate -l ${disk_pct_of_free_root}%FREE -n root system
-  lvcreate -L ${disk_size_swap} -n swap system
-  lvcreate -l ${disk_pct_of_free_home}%FREE -n home system
-
-  # FORMAT THE PARTITIONS
-
-  # Format the EFI partition
-  mkfs.fat -n EFI -F32 "$my_partition_efi"
-
-  # Format the root volume with BTRFS
-  mkfs.btrfs -f -L root /dev/system/root
-
-  # Format the home volume with xfs
-  mkfs.xfs -f -L home /dev/system/home
-
-  # Create swap space
-  wipefs --all --force /dev/system/swap
-  mkswap -L swap /dev/system/swap
-  swapon /dev/system/swap
-
-  # BTRFS SUBVOLUMES
-  # Notes:
-  # Format, then mount, create subvolumes, unmount, create subvolume
-  # directories, create subvolumes, unmount, re-mount with options (Correct?)
-
-  # Create separate BTRFS subvolumes that do not snapshot
-
-  mount /dev/mapper/system-root $my_root_mount
-
-  btrfs subvolume create $my_root_mount/@
-
-  mkdir $my_root_mount/.snapshots
-  btrfs subvolume create $my_root_mount/@/.snapshots
-
-  mkdir -p $my_root_mount/boot/grub2/i386-pc
-  btrfs subvolume create -p $my_root_mount/@/boot/grub2/i386-pc
-
-  mkdir -p $my_root_mount/boot/grub2/x86_64-efi
-  btrfs subvolume create -p $my_root_mount/@/boot/grub2/x86_64-efi
-
-  mkdir $my_root_mount/opt
-  btrfs subvolume create $my_root_mount/@/opt
-
-  mkdir $my_root_mount/root
-  btrfs subvolume create $my_root_mount/@/root
-
-  mkdir $my_root_mount/srv
-  btrfs subvolume create $my_root_mount/@/srv
-
-  mkdir $my_root_mount/tmp
-  btrfs subvolume create $my_root_mount/@/tmp
-
-  mkdir -p $my_root_mount/usr/local
-  btrfs subvolume create -p $my_root_mount/@/usr/local
-
-  mkdir $my_root_mount/var
-  btrfs subvolume create $my_root_mount/@/var
-  chattr +C $my_root_mount/@/var
-
-  umount $my_root_mount
-
-  # Options used for all mounts utilizing an SSD
-  mount /dev/mapper/system-root $my_root_mount -o subvol=@,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/.snapshots -o subvol=@/.snapshots,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/boot/grub2/i386-pc -o subvol=@/boot/grub2/i386-pc,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/boot/grub2/x86_64-efi -o subvol=@/boot/grub2/x86_64-efi,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/opt -o subvol=@/opt,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/root -o subvol=@/root,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/srv -o subvol=@/srv,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/tmp -o subvol=@/tmp,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/usr/local -o subvol=@/usr/local,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/var -o subvol=@/var,$MOUNTOPTS
-
-  # Mount the EFI partition
-  mkdir -p $my_root_mount/boot/efi
-  mount "$my_partition_efi" "$my_root_mount/boot/efi"
-
-  # Mount the home partition
-  mkdir -p $my_root_mount/home
-  mount /dev/mapper/system-home $my_root_mount/home
-
-  # Install base packages. "-K" tells pacstrap to generate a new pacman master key
+  # Install base packages
   pacstrap $my_root_mount "${pacstrap_pkgs[@]}" "$cpu_firmware" "$hypervisor_pkgs"
 
   # Generate the File System TABle (fstab) using UUID numbers
   genfstab -U $my_root_mount >> $my_root_mount/etc/fstab
 
   # Begin arch-chroot operations
-
-  # Set-up the Time Zone
-  arch-chroot $my_root_mount ln -sf /usr/share/zoneinfo/America/Detroit /etc/localtime
-
-  # Sync the Sytem Clock to the Hardware Clock
-  arch-chroot $my_root_mount hwclock --systohc
-
-  # Generate the locale
-  arch-chroot $my_root_mount sed -i '/^#en_US.UTF-8 UTF-8/s/^#//' /etc/locale.gen
-  arch-chroot $my_root_mount locale-gen
-  echo "LANG=en_US.UTF-8" >> $my_root_mount/etc/locale.conf
-
-  # Configure keyboard mapping (Copied from OpenSUSE Tumbleweed)
-  { echo 'KEYMAP=us';
-    echo 'FONT=eurlatgr';
-    echo 'FONT_MAP=';
-    echo 'FONT_UNIMAP=';
-    echo 'XKBLAYOUT=us';
-    echo 'XKBMODEL=pc105+inet';
-    echo 'XKBOPTIONS=terminate:ctrl_alt_bksp';
-  } >> $my_root_mount/etc/vconsole.conf
-
-  # Configure the Host Name
-  echo -e $my_host_name >> $my_root_mount/etc/hostname
-
-  # Build the hosts file
-  { echo -e '127.0.0.1\tlocalhost';
-    echo -e '::1\t\tlocalhost';
-    echo -e '127.0.1.1\tarch.localdomain\tarch'
-  } >> $my_root_mount/etc/hosts
-
+  configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name"
+ 
   # Enable color output for pacman and specify the number of parallel downloads
   arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
 
