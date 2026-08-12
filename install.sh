@@ -381,7 +381,7 @@ wipe_disk_signatures() {
 install_preinstall_pkgs() {
   local pkgs=("$@")
   log_info "Installing required preinstall packages"
-  pacman --noconfirm -Sy "${pkgs[@]}" || {
+  pacman --needed --noconfirm -Sy "${pkgs[@]}" || {
     log_error "Failed to install required preinstall packages: $*"
     return 1
   }
@@ -803,6 +803,20 @@ pause() {
   # Pause the script and wait for user input
   read -rp "Press Enter to continue..."
 }
+sudo_enable_wheel_group() {
+  local root_mount="$1"
+
+  log_info "Enabling sudo for wheel group in chroot environment"
+
+  # Make wheel group sudo enabled
+  SUDOER_TMP=$(mktemp)
+  cat "$root_mount/etc/sudoers" > "$SUDOER_TMP"
+  sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP"
+  visudo -c -f "$SUDOER_TMP" && cat "$SUDOER_TMP" > "$root_mount/etc/sudoers"
+  rm "$SUDOER_TMP"
+
+  log_info "Wheel group sudo enabled successfully"
+}
 # endregion - Function Definitions
 # =============================================================================
 # region - Main Script Execution
@@ -844,7 +858,7 @@ main() {
   localectl set-keymap ${keyboard_layout}
 
   # Set-up the fastest Arch mirrors
-  reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --save /etc/pacman.d/mirrorlist
+  reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --save "$pacman_mirrorlist}"
 
   wipe_disk_signatures "$my_disk"
 
@@ -884,20 +898,16 @@ main() {
   arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
 
   # Install the gui packages
-  arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --noconfirm --quiet
+  arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --needed --noconfirm --quiet
 
   install_and_configure_grub "$my_root_mount"
 
   enable_services "$my_root_mount" "${services_to_enable[@]}"
 
-# endregion - completed function calls
-
   # Make wheel group sudo enabled
-  SUDOER_TMP=$(mktemp)
-  cat $my_root_mount/etc/sudoers > "$SUDOER_TMP"
-  sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP"
-  visudo -c -f "$SUDOER_TMP" && cat "$SUDOER_TMP" > "$my_root_mount/etc/sudoers"
-  rm "$SUDOER_TMP"
+  sudo_enable_wheel_group "$my_root_mount"
+
+# endregion - completed function calls
 
   # Update mkinitcpio.conf
   arch-chroot $my_root_mount sed -i \
@@ -909,10 +919,11 @@ main() {
   # Add a user account
   arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s $my_shell -p "$my_password_hash" $my_user_id
 
-  # ToDo: Clean this section up
   # Install KDE Plasma and sddm
-  arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm
-  arch-chroot $my_root_mount pacman -S --needed --noconfirm plasma kde-applications
+  arch-chroot $my_root_mount pacman -S --needed --noconfirm \
+    xorg sddm plasma kde-applications
+  
+  # Enable SDDM display manager
   arch-chroot $my_root_mount systemctl enable sddm
 
   # Apply the Breeze theme to sddm
@@ -920,12 +931,7 @@ main() {
   arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
   # Install snapper
-  arch-chroot $my_root_mount pacman -S --noconfirm snapper snap-pac inotify-tools
-  #arch-chroot $my_root_mount btrfs subvolume delete /.snapshots/
-  #arch-chroot $my_root_mount snapper -c root create-config /
-  #arch-chroot $my_root_mount snapper list-configs
-  #arch-chroot $my_root_mount snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes
-  #arch-chroot $my_root_mount sed -i 's/PRUNENAMES = ".git .hg .svn"/PRUNENAMES = ".git .hg .svn .snapshots"/' /etc/updatedb.conf
+  arch-chroot $my_root_mount pacman -S --needed --noconfirm snapper snap-pac inotify-tools
 
   # Configure GRUB for snapshot recovery
   arch-chroot $my_root_mount sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
@@ -991,7 +997,7 @@ main() {
   clear
   # Copy this script to the root home directory
   cp install.sh $my_root_mount/root/Scripts
-  cp LOG_FILE $my_root_mount/root
+  cp "$LOG_FILE" $my_root_mount/root/
 
   echo -e "${success_color}Please set a password for the new root account:${no_color}"
   arch-chroot $my_root_mount passwd root
