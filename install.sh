@@ -840,25 +840,32 @@ update_mkinitcpio() {
 }
 detect_gpu() {
     # Get PCI IDs. -nn shows numeric IDs. -k shows kernel driver in use.
-    local pci_info=$(lspci -nn -k | grep -A 3 -E 'VGA|3D')
+    local pci_info
+    local vendor_id
+
+    pci_info=$(lspci -nn -k | grep -A 3 -E 'VGA|3D')
     
     # Extract Vendor ID (first 4 chars after [)
     # Example: [10de:1b80] -> 10de
-    local vendor_id=$(echo "$pci_info" | grep -oP '\[\K[0-9a-f]{4}' | head -1)
-
+    vendor_id=$(echo "$pci_info" | grep -oP '\[\K[0-9a-f]{4}' | head -1)
+    
     case "$vendor_id" in
-        10de)
-            printf '%s\n' "NVIDIA"
-            ;;
-        1002)
-            printf '%s\n' "AMD"
-            ;;
-        8086)
-            printf '%s\n' "Intel"
-            ;;
-        *)
-            printf '%s\n' "Unknown"
-            ;;
+      10de)
+        log_info "GPI detected: NVIDIA"
+        printf '%s\n' "NVIDIA"
+          ;;
+      1002)
+        log_info "GPU detected: AMD"
+        printf '%s\n' "AMD"
+        ;;
+      8086)
+        log_info "GPU detected: Intel"
+        printf '%s\n' "Intel"
+        ;;
+      *)
+        log_info "GPU detected: Unknown"
+        printf '%s\n' "Unknown"
+        ;;
     esac
 }
 configure_grub_nvidia() {
