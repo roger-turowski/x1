@@ -600,7 +600,7 @@ create_btrfs_subvolumes() {
   log_info "Creating BTRFS subvolumes on $root_mount"
 
   # Mount the root logical volume
-  mount /dev/system/root "$root_mount" || \
+  mount /dev/system/root $root_mount || \
     log_error "Failed to mount root logical volume /dev/system/root to $root_mount"
 
   # 1. Create the root @ subvolume
@@ -689,8 +689,9 @@ configure_time_and_locale() {
   local root_mount="$1"
   local timezone="$2"
   local hostname="$3"
+  local host_domain="$4"
 
-  arch-chroot "$root_mount" /usr/bin/env bash -s "$timezone" "$hostname" << 'CHROOT_EOF'
+  arch-chroot "$root_mount" /usr/bin/env bash -s "$timezone" "$hostname" << CHROOT_EOF
     export LANG=C
     set -e
 
@@ -737,7 +738,7 @@ configure_time_and_locale() {
     # Build the hosts file
     { echo -e '127.0.0.1\tlocalhost';
       echo -e '::1\t\tlocalhost';
-      echo -e '127.0.1.1\tarch.localdomain\tarch';
+      echo -e "127.0.1.1\t${hostname}.${host_domain}\t${hostname}";
     } > /etc/hosts
 
     # Enable color output for pacman and specify the number of parallel downloads
@@ -804,6 +805,7 @@ pause() {
   read -rp "Press Enter to continue..."
 }
 sudo_enable_wheel_group() {
+  # Make wheel group sudo enabled
   local root_mount="$1"
 
   log_info "Enabling sudo for wheel group in chroot environment"
@@ -811,11 +813,105 @@ sudo_enable_wheel_group() {
   # Make wheel group sudo enabled
   SUDOER_TMP=$(mktemp)
   cat "$root_mount/etc/sudoers" > "$SUDOER_TMP"
-  sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP"
-  visudo -c -f "$SUDOER_TMP" && cat "$SUDOER_TMP" > "$root_mount/etc/sudoers"
-  rm "$SUDOER_TMP"
+  sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP" || \
+    log_error "Failed to enable sudo for wheel group in $root_mount/etc/sudoers"
+  visudo -c -f "$SUDOER_TMP" && cat "$SUDOER_TMP" > "$root_mount/etc/sudoers" || \
+    log_error "Sudoers file validation failed after enabling wheel group"
+  rm "$SUDOER_TMP" || log_error "Failed to remove temporary sudoers file $SUDOER_TMP"
 
   log_info "Wheel group sudo enabled successfully"
+}
+update_mkinitcpio() {
+  # Update mkinitcpio.conf
+  local root_mount="$1"
+
+  log_info "Updating mkinitcpio configuration in chroot environment"
+
+  arch-chroot "$root_mount" sed -i \
+    -e 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf \
+    -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs/' \
+    /etc/mkinitcpio.conf || \
+    log_error "Failed to update mkinitcpio.conf in chroot"
+
+  arch-chroot "$root_mount" mkinitcpio -p linux || \
+    log_error "Failed to regenerate initramfs in chroot"
+
+  log_info "mkinitcpio configuration updated successfully"
+}
+detect_gpu() {
+    # Get PCI IDs. -nn shows numeric IDs. -k shows kernel driver in use.
+    local pci_info=$(lspci -nn -k | grep -A 3 -E 'VGA|3D')
+    
+    # Extract Vendor ID (first 4 chars after [)
+    # Example: [10de:1b80] -> 10de
+    local vendor_id=$(echo "$pci_info" | grep -oP '\[\K[0-9a-f]{4}' | head -1)
+
+    case "$vendor_id" in
+        10de)
+            printf '%s\n' "NVIDIA"
+            ;;
+        1002)
+            printf '%s\n' "AMD"
+            ;;
+        8086)
+            printf '%s\n' "Intel"
+            ;;
+        *)
+            printf '%s\n' "Unknown"
+            ;;
+    esac
+}
+configure_grub_nvidia() {
+    local grub_cfg="/etc/default/grub"
+    local target_params="nvidia-drm.modeset=1"
+    
+    # Check if parameter already exists to avoid duplicates
+    if ! grep -q "$target_params" "$grub_cfg"; then
+        sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"\(.*\)\"/GRUB_CMDLINE_LINUX_DEFAULT=\"\1 $target_params\"/" "$grub_cfg"
+        log_info "Added kernel parameters for NVIDIA."
+        
+        # Regenerate GRUB config
+        grub-mkconfig -o /boot/grub/grub.cfg
+    else
+        log_info "NVIDIA kernel parameters already present."
+    fi
+}
+install_gpu_drivers() {
+    local root_mount="$1"
+    local gpu_type=$(detect_gpu)
+    
+    log_info "Detected GPU Vendor: $gpu_type"
+
+    case "$gpu_type" in
+        NVIDIA)
+            log_info "Installing NVIDIA proprietary drivers..."
+            
+            # Ensure DKMS and headers are present
+            arch-chroot "$root_mount" pacman -S --noconfirm linux-headers base-devel
+            
+            # Install nvidia-dkms (handles kernel updates automatically)
+            arch-chroot "$root_mount" pacman -S --noconfirm nvidia-dkms nvidia-utils libva-nvidia-driver
+            
+            # Configure GRUB
+            configure_grub_nvidia
+            ;;
+        AMD)
+            log_info "Installing AMD drivers..."
+            arch-chroot "$root_mount" pacman -S --noconfirm mesa lib32-mesa xf86-video-amdgpu amd-ucode
+            ;;
+        Intel)
+            log_info "Installing Intel drivers..."
+            arch-chroot "$root_mount" pacman -S --noconfirm mesa lib32-mesa intel-media-driver intel-ucode
+            ;;
+        *)
+            log_warning "Unknown GPU detected. Manual intervention may be required."
+            ;;
+    esac
+    
+    # Rebuild initramfs to ensure new modules are included
+    arch-chroot "$root_mount" mkinitcpio -P
+    
+    log_info "Driver installation complete. Reboot required."
 }
 # endregion - Function Definitions
 # =============================================================================
@@ -830,11 +926,12 @@ main() {
   local cpu_firmware=""
   local hypervisor_pkgs=""
   local -r my_shell="/usr/bin/bash"
-  local -r efi_partition_size="4G"
+  local -r host_domain="vienna.ad"
+  local -r efi_partition_size="550M"
   local -r root_partition_size="0" # Use all remaining space for root
   readonly keyboard_layout="us"
   readonly disk_pct_of_free_root=40
-  readonly disk_size_swap=8G
+  readonly disk_size_swap=4G
   readonly disk_pct_of_free_home=100
 
   # endregion - main variables
@@ -892,7 +989,9 @@ main() {
   genfstab -U $my_root_mount >> $my_root_mount/etc/fstab
 
   # Begin arch-chroot operations
-  configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name"
+  install_gpu_drivers "$my_root_mount"
+ 
+  configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name" "$host_domain"
  
   # Enable color output for pacman and specify the number of parallel downloads
   arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
@@ -904,24 +1003,17 @@ main() {
 
   enable_services "$my_root_mount" "${services_to_enable[@]}"
 
-  # Make wheel group sudo enabled
   sudo_enable_wheel_group "$my_root_mount"
 
-# endregion - completed function calls
+  update_mkinitcpio "$my_root_mount"
 
-  # Update mkinitcpio.conf
-  arch-chroot $my_root_mount sed -i \
-    -e 's/MODULES=()/MODULES=(btrfs)/' /etc/mkinitcpio.conf \
-    -e 's/block filesystems fsck/block lvm2 filesystems fsck grub-btrfs-overlayfs/' \
-    /etc/mkinitcpio.conf
-  arch-chroot $my_root_mount mkinitcpio -p linux
+# endregion - completed function calls
 
   # Add a user account
   arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s $my_shell -p "$my_password_hash" $my_user_id
 
   # Install KDE Plasma and sddm
-  arch-chroot $my_root_mount pacman -S --needed --noconfirm \
-    xorg sddm plasma kde-applications
+  arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm plasma kde-applications
   
   # Enable SDDM display manager
   arch-chroot $my_root_mount systemctl enable sddm
@@ -994,18 +1086,21 @@ main() {
   # Create a directory for AppImages
   arch-chroot $my_root_mount mkdir /home/$my_user_id/AppImages/
   
-  clear
   # Copy this script to the root home directory
   cp install.sh $my_root_mount/root/Scripts
+  chmod -x $my_root_mount/root/Scripts/install.sh
   cp "$LOG_FILE" $my_root_mount/root/
+
+  clear
 
   echo -e "${success_color}Please set a password for the new root account:${no_color}"
   arch-chroot $my_root_mount passwd root
 
   sync
-  umount $my_root_mount
+  umount $my_root_mount || log_error "Failed to unmount root mount point $my_root_mount"
+  swapoff /dev/system/swap || log_error "Failed to disable swap on /dev"
 
-  echo Script finished! Please reboot.
+  log_info "Script finished! Please reboot."
 }
 # endregion - Main Script Execution
 # =============================================================================
