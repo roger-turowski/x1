@@ -526,12 +526,12 @@ create_physical_partitions() {
   local root_size="$3"
 
   log_info "Creating physical partitions on $disk"
-  
+
   # Create the physical EFI partition
-  sgdisk --new=1:0:+${efi_size} --typecode=1:ef00 --change-name=1:EFI "$disk" || \
+  sgdisk --new=1:0:+"${efi_size}" --typecode=1:ef00 --change-name=1:EFI "${disk}" || \
     log_error "Failed to create EFI partition on $disk"
 
-  sgdisk --new=2:0:+${root_size} --typecode=2:8e00 --change-name=2:root "$disk" || \
+  sgdisk --new=2:0:+"${root_size}" --typecode=2:8e00 --change-name=2:root "$disk" || \
     log_error "Failed to create root partition on $disk"
 
   # Display a disk summary
@@ -542,7 +542,8 @@ create_volume_group() {
   local root_partition="$1"
 
   # Create a volume group named "system" using the root partition
-  vgcreate system "$root_partition"
+  vgcreate system "$root_partition" || \
+    log_error
 }
 create_physical_volumes() {
   local root_partition="$1"
@@ -600,7 +601,7 @@ create_btrfs_subvolumes() {
   log_info "Creating BTRFS subvolumes on $root_mount"
 
   # Mount the root logical volume
-  mount /dev/system/root $root_mount || \
+  mount /dev/system/root "${root_mount}" || \
     log_error "Failed to mount root logical volume /dev/system/root to $root_mount"
 
   # 1. Create the root @ subvolume
@@ -654,16 +655,16 @@ mount_subvolumes() {
   local mount_opts="$2"
 
   # Options used for all mounts utilizing an SSD
-  mount /dev/mapper/system-root $my_root_mount -o subvol=@,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/.snapshots -o subvol=@/.snapshots,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/boot/grub2/i386-pc -o subvol=@/boot/grub2/i386-pc,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/boot/grub2/x86_64-efi -o subvol=@/boot/grub2/x86_64-efi,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/opt -o subvol=@/opt,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/root -o subvol=@/root,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/srv -o subvol=@/srv,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/tmp -o subvol=@/tmp,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/usr/local -o subvol=@/usr/local,$MOUNTOPTS
-  mount /dev/mapper/system-root $my_root_mount/var -o subvol=@/var,$MOUNTOPTS
+  mount /dev/mapper/system-root $my_root_mount -o subvol=@,"${mount_opts}"
+  mount /dev/mapper/system-root $my_root_mount/.snapshots -o subvol=@/.snapshots,"${mount_opts}"
+  mount /dev/mapper/system-root $my_root_mount/boot/grub2/i386-pc -o subvol=@/boot/grub2/i386-pc,"${mount_opts}"
+  mount /dev/mapper/system-root $my_root_mount/boot/grub2/x86_64-efi -o subvol=@/boot/grub2/x86_64-efi,"${mount_opts}"
+  mount /dev/mapper/system-root $my_root_mount/opt -o subvol=@/opt,"${mount_opts}"
+  mount /dev/mapper/system-root $my_root_mount/root -o subvol=@/root,"${mount_opts}"
+  mount /dev/mapper/system-root $my_root_mount/srv -o subvol=@/srv,"${mount_opts}"
+  mount /dev/mapper/system-root $my_root_mount/tmp -o subvol=@/tmp,"${mount_opts}"
+  mount /dev/mapper/system-root $my_root_mount/usr/local -o subvol=@/usr/local,"${mount_opts}"
+  mount /dev/mapper/system-root $my_root_mount/var -o subvol=@/var,"${mount_opts}"
 }
 mount_partitions() {
   local root_mount="$1"
@@ -764,7 +765,8 @@ enable_services() {
 install_and_configure_grub() {
   # Install and configure GRUB for normal and LTS kernels
   local root_mount="$1"
-
+  log_info "Installing and configuring GRUB"
+  
   arch-chroot "$root_mount" /usr/bin/env bash << 'CHROOT_EOF'
     export LANG=C
     set -e
@@ -885,8 +887,10 @@ configure_grub_nvidia() {
 }
 install_gpu_drivers() {
     local root_mount="$1"
-    local gpu_type=$(detect_gpu)
+    local gpu_type
     
+    gpu_type=$(detect_gpu)
+
     log_info "Detected GPU Vendor: $gpu_type"
 
     case "$gpu_type" in
