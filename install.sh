@@ -1132,7 +1132,7 @@ main() {
 
   create_post_install_scripts_for_user "${my_root_mount}" "${my_user_id}"
 
-# endregion - completed function calls
+  # endregion - completed function calls
 
   # Enable oh-my-posh in zsh
   echo -e "\neval \"\$(oh-my-posh init zsh)\"" >> "$my_root_mount/home/$my_user_id/.zshrc";
