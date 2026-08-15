@@ -71,10 +71,10 @@ readonly pacman_conf="/etc/pacman.conf"
 readonly pacman_mirrorlist="/etc/pacman.d/mirrorlist"
 readonly pacman_parallel_downloads=7
 readonly pacman_color_output=true
-readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
+# readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
 # Application configuration files
-readonly snapper_conf="/etc/snapper/configs/root" 
-readonly updatedb_conf="/etc/updatedb.conf"
+# readonly snapper_conf="/etc/snapper/configs/root" 
+# readonly updatedb_conf="/etc/updatedb.conf"
 # Packages to install
 readonly preinstall_pkgs=(
   # Packages to install before the main installation
@@ -817,8 +817,7 @@ sudo_enable_wheel_group() {
   cat "$root_mount/etc/sudoers" > "$SUDOER_TMP"
   sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP" || \
     log_error "Failed to enable sudo for wheel group in $root_mount/etc/sudoers"
-  visudo -c -f "$SUDOER_TMP" && cat "$SUDOER_TMP" > "$root_mount/etc/sudoers" || \
-    log_error "Sudoers file validation failed after enabling wheel group"
+  visudo -c -f "$SUDOER_TMP" && cat "$SUDOER_TMP" > "$root_mount/etc/sudoers"
   rm "$SUDOER_TMP" || log_error "Failed to remove temporary sudoers file $SUDOER_TMP"
 
   log_info "Wheel group sudo enabled successfully"
@@ -924,6 +923,35 @@ install_gpu_drivers() {
     
     log_info "Driver installation complete. Reboot required."
 }
+create_post_install_scripts_for_root() {
+  # Create post install scripts for root
+  local root_mount="$1"
+
+  mkdir "${root_mount}/root/Scripts"
+  arch-chroot "${root_mount}" touch /root/Scripts/enable_snapper_snapshots.sh
+  arch-chroot "${root_mount}" chmod +x /root/Scripts/enable_snapper_snapshots.sh
+  { echo -e '#!/usr/bin/bash';
+    echo -e 'btrfs subvolume delete /.snapshots/';
+    echo -e 'snapper -c root create-config /';
+    echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
+    echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
+    echo -e 'snapper list-configs';
+  } >> "${root_mount}/root/Scripts/enable_snapper_snapshots.sh"
+}
+create_post_install_scripts_for_user() {
+  local root_mount="$1"
+  local user_id="$2"
+  arch-chroot "${root_mount}" mkdir "/home/${user_id}/Scripts/"
+  arch-chroot "${root_mount}" touch "/home/${user_id}/Scripts/enable_yay.sh"
+  arch-chroot "${root_mount}" chmod +x "/home/${user_id}/Scripts/enable_yay.sh"
+  { echo -e '#!/usr/bin/bash';
+    echo -e 'git clone https://aur.archlinux.org/yay.git';
+    echo -e 'pushd yay';
+    echo -e 'makepkg -si';
+    echo -e 'popd';
+    echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
+  } >> "${root_mount}/home/${user_id}/Scripts/enable_y"
+}  
 # endregion - Function Definitions
 # =============================================================================
 # region - Main Script Execution
@@ -1018,8 +1046,6 @@ main() {
 
   update_mkinitcpio "$my_root_mount"
 
-# endregion - completed function calls
-
   # Add a user account
   arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s $my_shell -p "$my_password_hash" $my_user_id
 
@@ -1045,29 +1071,35 @@ main() {
   # Allow root to have ssh access initially for troubleshooting while developing
   arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
-  # Create post-install scripts for root
-  mkdir $my_root_mount/root/Scripts
-  arch-chroot $my_root_mount touch /root/Scripts/enable_snapper_snapshots.sh
-  arch-chroot $my_root_mount chmod +x /root/Scripts/enable_snapper_snapshots.sh
-  { echo -e '#!/usr/bin/bash';
-    echo -e 'btrfs subvolume delete /.snapshots/';
-    echo -e 'snapper -c root create-config /';
-    echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
-    echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
-    echo -e 'snapper list-configs';
-  } >> $my_root_mount/root/Scripts/enable_snapper_snapshots.sh
+  # # Create post install scripts for root
+  # mkdir $my_root_mount/root/Scripts
+  # arch-chroot $my_root_mount touch /root/Scripts/enable_snapper_snapshots.sh
+  # arch-chroot $my_root_mount chmod +x /root/Scripts/enable_snapper_snapshots.sh
+  # { echo -e '#!/usr/bin/bash';
+  #   echo -e 'btrfs subvolume delete /.snapshots/';
+  #   echo -e 'snapper -c root create-config /';
+  #   echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
+  #   echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
+  #   echo -e 'snapper list-configs';
+  # } >> $my_root_mount/root/Scripts/enable_snapper_snapshots.sh
 
-  # Create post install scripts for $my_user_id
-  arch-chroot $my_root_mount mkdir /home/$my_user_id/Scripts/
-  arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/enable_yay.sh
-  arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
-  { echo -e '#!/usr/bin/bash';
-    echo -e 'git clone https://aur.archlinux.org/yay.git';
-    echo -e 'pushd yay';
-    echo -e 'makepkg -si';
-    echo -e 'popd';
-    echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
-  } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
+  create_post_install_scripts_for_root "${my_root_mount}"
+
+  # # Create post install scripts for $my_user_id
+  # arch-chroot $my_root_mount mkdir /home/$my_user_id/Scripts/
+  # arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/enable_yay.sh
+  # arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
+  # { echo -e '#!/usr/bin/bash';
+  #   echo -e 'git clone https://aur.archlinux.org/yay.git';
+  #   echo -e 'pushd yay';
+  #   echo -e 'makepkg -si';
+  #   echo -e 'popd';
+  #   echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
+  # } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
+
+  create_post_install_scripts_for_user "${my_root_mount}" "${my_user_id}"
+
+# endregion - completed function calls
 
   # Enable oh-my-posh in zsh
   echo -e "\neval \"\$(oh-my-posh init zsh)\"" >> "$my_root_mount/home/$my_user_id/.zshrc";
