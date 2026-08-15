@@ -951,7 +951,31 @@ create_post_install_scripts_for_user() {
     echo -e 'popd';
     echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
   } >> "${root_mount}/home/${user_id}/Scripts/enable_y"
-}  
+}
+create_script_to_install_flatpack_apps(){
+  local root_mount="$1"
+  local user_id="$2"
+
+    # Create script to install FlatPack apps
+  arch-chroot "${root_mount}" touch "/home/${user_id}/Scripts/install_flatpak_apps.sh"
+  arch-chroot "${root_mount}" chmod +x "/home/${user_id}/Scripts/install_flatpak_apps.sh"
+  { echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Keypunch
+    echo -e flatpak install -y --noninteractive flathub net.cozic.joplin_desktop
+    echo -e flatpak install -y --noninteractive flathub org.deluge_torrent.deluge
+    echo -e flatpak install -y --noninteractive flathub com.github.sixpounder.GameOfLife
+    echo -e flatpak install -y --noninteractive flathub io.github.giantpinkrobots.flatsweep
+    echo -e flatpak install -y --noninteractive flathub io.github.shiftey.Desktop
+    echo -e flatpak install -y --noninteractive flathub com.sweethome3d.Sweethome3d
+    echo -e flatpak install -y --noninteractive flathub org.kicad.KiCad
+    echo -e flatpak install -y --noninteractive flathub com.obsproject.Studio
+    echo -e flatpak install -y --noninteractive flathub com.github.artemanufrij.regextester
+    echo -e flatpak install -y --noninteractive flathub org.remmina.Remmina
+    echo -e flatpak install -y --noninteractive flathub org.stellarium.Stellarium
+    echo -e flatpak install -y --noninteractive flathub com.adrienplazas.Metronome
+    echo -e flatpak install -y --noninteractive flathub io.github.nokse22.inspector
+    echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Fretboard
+  } >> "${root_mount}/home/${user_id}/Scripts/install_flatpak_apps.sh"
+}
 # endregion - Function Definitions
 # =============================================================================
 # region - Main Script Execution
@@ -1105,24 +1129,7 @@ main() {
   echo -e "\neval \"\$(oh-my-posh init zsh)\"" >> "$my_root_mount/home/$my_user_id/.zshrc";
   arch-chroot $my_root_mount chown $my_user_id:$my_user_id /home/$my_user_id/.zshrc
 
-  arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/install_flatpak_apps.sh
-  arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/install_flatpak_apps.sh
-  { echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Keypunch
-    echo -e flatpak install -y --noninteractive flathub net.cozic.joplin_desktop
-    echo -e flatpak install -y --noninteractive flathub org.deluge_torrent.deluge
-    echo -e flatpak install -y --noninteractive flathub com.github.sixpounder.GameOfLife
-    echo -e flatpak install -y --noninteractive flathub io.github.giantpinkrobots.flatsweep
-    echo -e flatpak install -y --noninteractive flathub io.github.shiftey.Desktop
-    echo -e flatpak install -y --noninteractive flathub com.sweethome3d.Sweethome3d
-    echo -e flatpak install -y --noninteractive flathub org.kicad.KiCad
-    echo -e flatpak install -y --noninteractive flathub com.obsproject.Studio
-    echo -e flatpak install -y --noninteractive flathub com.github.artemanufrij.regextester
-    echo -e flatpak install -y --noninteractive flathub org.remmina.Remmina
-    echo -e flatpak install -y --noninteractive flathub org.stellarium.Stellarium
-    echo -e flatpak install -y --noninteractive flathub com.adrienplazas.Metronome
-    echo -e flatpak install -y --noninteractive flathub io.github.nokse22.inspector
-    echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Fretboard
-  } >> $my_root_mount/home/$my_user_id/Scripts/install_flatpak_apps.sh
+  create_script_to_install_flatpack_apps "${my_root_mount}" "${my_user_id}"
 
   arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
