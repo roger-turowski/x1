@@ -979,10 +979,10 @@ create_script_to_install_flatpack_apps(){
 configure_grub_for_snapshot_recovery() {
   local root_mount="$1"
   # Configure GRUB for snapshot recovery
-  arch-chroot $root_mount sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
-  arch-chroot $root_mount grub-mkconfig -o /boot/grub/grub.cfg
-  arch-chroot $root_mount systemctl enable grub-btrfsd
-  arch-chroot $root_mount systemctl enable snapper-boot.timer
+  arch-chroot "${root_mount}" sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
+  arch-chroot "${root_mount}" grub-mkconfig -o /boot/grub/grub.cfg
+  arch-chroot "${root_mount}" systemctl enable grub-btrfsd
+  arch-chroot "${root_mount}" systemctl enable snapper-boot.timer
 }
 # endregion - Function Definitions
 # =============================================================================
@@ -1099,6 +1099,7 @@ main() {
   # arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
   # arch-chroot $my_root_mount systemctl enable grub-btrfsd
   # arch-chroot $my_root_mount systemctl enable snapper-boot.timer
+  configure_grub_for_snapshot_recovery "${my_root_mount}"
 
   # Allow root to have ssh access initially for troubleshooting while developing
   arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
@@ -1155,7 +1156,9 @@ main() {
   arch-chroot $my_root_mount passwd root
 
   sync
+  
   umount $my_root_mount || log_error "Failed to unmount root mount point $my_root_mount"
+
   swapoff /dev/system/swap || log_error "Failed to disable swap on /dev"
 
   log_info "Script finished! Please reboot."
