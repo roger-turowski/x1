@@ -83,21 +83,35 @@ readonly preinstall_pkgs=(
 readonly pacstrap_pkgs=(
   # Packages to install using pacstrap. Must not be readonly.
   # Omit CPU firmware since we will detect the CPU type and add it later.
+  acpi
+  acpi_call
+  acpid
+  alsa-firmware
+  alsa-utils
+  avahi
   base
   base-devel
   bash-completion
   bat
+  bluez
+  bluez-utils
   btop
   btrfs-progs
   cmatrix
   cowsay
   cryptsetup
+  cups
+  dialog
   dnsmasq
+  dnsutils
   dosfstools
   e2fsprogs
+  edk2-ovmf
   efibootmgr
   eza
   fastfetch
+  firewalld
+  flatpak
   fzf
   git
   grub
@@ -112,8 +126,12 @@ readonly pacstrap_pkgs=(
   linux-lts-headers
   lvm2
   mc
+  mtools
   nano
   networkmanager
+  nfs-utils
+  nss-mdns
+  ntfs-3g
   nmap
   nvim
   openbsd-netcat
@@ -122,13 +140,19 @@ readonly pacstrap_pkgs=(
   plocate
   reflector
   rsync
+  sof-firmware
   sudo
+  terminus-font
   thin-provisioning-tools
+  tlp
   tmux
   util-linux
+  vde2
   vifm
   vim
   whois
+  wpa_supplicant
+  xdg-utils
   zellij
   zsh
   zsh-completions
@@ -150,44 +174,21 @@ readonly podman_pkgs(
 )
 readonly gui_pkgs=(
   # Packages to install for the GUI environment
-  acpi
-  acpi_call
-  acpid
   alacritty
-  alsa-firmware
-  alsa-utils
   archlinux-wallpaper
-  avahi
-  bluez
-  bluez-utils
   calibre
   code
-  cups
-  dialog
-  dnsutils
-  edk2-ovmf
-  efibootmgr
-  firewalld
-  flatpak
   gimp
   gvfs
   gvfs-smb
   inkscape
   kitty
   libreoffice-fresh
-  lvm2
   meld
-  mtools
   network-manager-applet
-  nfs-utils
-  nss-mdns
-  ntfs-3g
   pulseaudio
   scribus
-  sof-firmware
   strawberry
-  terminus-font
-  tlp
   ttf-0xproto-nerd
   ttf-cascadia-code-nerd
   ttf-cascadia-mono-nerd
@@ -203,12 +204,9 @@ readonly gui_pkgs=(
   ttf-sourcecodepro-nerd
   ttf-terminus-nerd
   ttf-ubuntu-mono-nerd
-  vde2
   vlc
   wireshark-qt
-  wpa_supplicant
   xdg-user-dirs
-  xdg-utils
 )
 readonly services_to_enable=(
   # Services to enable after installation
@@ -311,6 +309,23 @@ configure_pacman_preinstallation() {
   sed -i "s/ParallelDownloads = [0-9]\+/ParallelDownloads = $parallel_downloads/" "$pacman_conf_local"
 
   log_info "Pacman pre-install configuration updated successfully."
+}
+ask_install_de_native() {
+    PS3="Select an option: "
+    options=("Yes, install Desktop Environment" "No, skip Desktop Environment")
+    
+    select opt in "${options[@]}"; do
+        case $opt in
+            "Yes, install Desktop Environment")
+                return 0
+                ;;
+            "No, skip Desktop Environment")
+                return 1
+                ;;
+            *) 
+                echo "Invalid option $REPLY";;
+        esac
+    done
 }
 teardown_existing_mappings() {
     # Mapper devices are stacked—close the top layer first, then the bottom
@@ -558,9 +573,11 @@ create_logical_volumes() {
   log_info "Creating logical volumes on $root_partition"
 
   # Create the logical volumes for root, swap and home
-  lvcreate -l "${root_partition}FREE" -n root system || \
+  # lvcreate -l "${root_partition}FREE" -n root system || \
+  #  log_error "Failed to create root logical volume"
+  lvcreate -l "${root_partition}" -n root system || \
     log_error "Failed to create root logical volume"
-  
+
   lvcreate -L "${swap_size}" -n swap system || \
     log_error "Failed to create swap logical volume"
   
@@ -905,28 +922,66 @@ install_gpu_drivers() {
     
     log_info "Driver installation complete. Reboot required."
 }
-configure_grub_nvidia() {
+create_post_install_scripts_for_root() {
+  # Create post install scripts for root
   local root_mount="$1"
-  local grub_config="/etc/default/grub"
-  local grub_cfg="/etc/default/grub"
-  local target_params="nvidia-drm.modeset=1"
-  
-  arch-chroot $root_mount bash grub_config $grub_cfg $target_params << CHROOT_EOF
-  # Check if parameter already exists to avoid duplicates
-  if ! grep -q "$target_params" "$grub_cfg"; then
-    sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"\(.*\)\"/GRUB_CMDLINE_LINUX_DEFAULT=\"\1 $target_params\"/" "$grub_cfg"
-    echo "Added kernel parameters for NVIDIA."
-    
-    # Regenerate GRUB config
-    grub-mkconfig -o /boot/grub/grub.cfg
-  else
-    echo "NVIDIA kernel parameters already present."
-  fi
-CHROOT_EOF
+
+  mkdir "${root_mount}/root/Scripts"
+  arch-chroot "${root_mount}" touch /root/Scripts/enable_snapper_snapshots.sh
+  arch-chroot "${root_mount}" chmod +x /root/Scripts/enable_snapper_snapshots.sh
+  { echo -e '#!/usr/bin/bash';
+    echo -e 'btrfs subvolume delete /.snapshots/';
+    echo -e 'snapper -c root create-config /';
+    echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
+    echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
+    echo -e 'snapper list-configs';
+  } >> "${root_mount}/root/Scripts/enable_snapper_snapshots.sh"
 }
-install_podman() {
-  root_mount="$1"
-  arch-chroot $root_mount usermod --add-subuids 100000-165536 --add-subgids 100000-165536 $USER
+create_post_install_scripts_for_user() {
+  local root_mount="$1"
+  local user_id="$2"
+  arch-chroot "${root_mount}" mkdir "/home/${user_id}/Scripts/"
+  arch-chroot "${root_mount}" touch "/home/${user_id}/Scripts/enable_yay.sh"
+  arch-chroot "${root_mount}" chmod +x "/home/${user_id}/Scripts/enable_yay.sh"
+  { echo -e '#!/usr/bin/bash';
+    echo -e 'git clone https://aur.archlinux.org/yay.git';
+    echo -e 'pushd yay';
+    echo -e 'makepkg -si';
+    echo -e 'popd';
+    echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
+  } >> "${root_mount}/home/${user_id}/Scripts/enable_y"
+}
+create_script_to_install_flatpack_apps(){
+  local root_mount="$1"
+  local user_id="$2"
+
+    # Create script to install FlatPack apps
+  arch-chroot "${root_mount}" touch "/home/${user_id}/Scripts/install_flatpak_apps.sh"
+  arch-chroot "${root_mount}" chmod +x "/home/${user_id}/Scripts/install_flatpak_apps.sh"
+  { echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Keypunch
+    echo -e flatpak install -y --noninteractive flathub net.cozic.joplin_desktop
+    echo -e flatpak install -y --noninteractive flathub org.deluge_torrent.deluge
+    echo -e flatpak install -y --noninteractive flathub com.github.sixpounder.GameOfLife
+    echo -e flatpak install -y --noninteractive flathub io.github.giantpinkrobots.flatsweep
+    echo -e flatpak install -y --noninteractive flathub io.github.shiftey.Desktop
+    echo -e flatpak install -y --noninteractive flathub com.sweethome3d.Sweethome3d
+    echo -e flatpak install -y --noninteractive flathub org.kicad.KiCad
+    echo -e flatpak install -y --noninteractive flathub com.obsproject.Studio
+    echo -e flatpak install -y --noninteractive flathub com.github.artemanufrij.regextester
+    echo -e flatpak install -y --noninteractive flathub org.remmina.Remmina
+    echo -e flatpak install -y --noninteractive flathub org.stellarium.Stellarium
+    echo -e flatpak install -y --noninteractive flathub com.adrienplazas.Metronome
+    echo -e flatpak install -y --noninteractive flathub io.github.nokse22.inspector
+    echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Fretboard
+  } >> "${root_mount}/home/${user_id}/Scripts/install_flatpak_apps.sh"
+}
+configure_grub_for_snapshot_recovery() {
+  local root_mount="$1"
+  # Configure GRUB for snapshot recovery
+  arch-chroot "${root_mount}" sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
+  arch-chroot "${root_mount}" grub-mkconfig -o /boot/grub/grub.cfg
+  arch-chroot "${root_mount}" systemctl enable grub-btrfsd
+  arch-chroot "${root_mount}" systemctl enable snapper-boot.timer
 }
 # endregion - Function Definitions
 # =============================================================================
@@ -940,11 +995,13 @@ main() {
   local my_password_hash=""
   local cpu_firmware=""
   local hypervisor_pkgs=""
+  local install_gui_apps
   local -r my_shell="/usr/bin/bash"
   local -r host_domain="vienna.ad"
   local -r efi_partition_size="550M"
   local -r root_partition_size="0" # Use all remaining space for root
   readonly keyboard_layout="us"
+  readonly disk_size_root=128G
   readonly disk_pct_of_free_root=40
   readonly disk_size_swap=4G
   readonly disk_pct_of_free_home=100
@@ -955,6 +1012,8 @@ main() {
   configure_time_preinstallation "$my_timezone"
   configure_pacman_preinstallation "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
   install_preinstall_pkgs "${preinstall_pkgs[@]}"
+
+  install_gui_apps=$(ask_install_de_native)
 
   if ! install_disk=$(get_install_disk); then
     printf 'No disk selected. Exiting.\n' >&2
@@ -987,7 +1046,7 @@ main() {
 
   create_volume_group "$my_partition_root"
 
-  create_logical_volumes "${disk_pct_of_free_root}%" "$disk_size_swap" "${disk_pct_of_free_home}%"
+  create_logical_volumes "${disk_size_root}%" "$disk_size_swap" "${disk_pct_of_free_home}%"
 
   format_the_partitions "$my_partition_efi"
 
@@ -1011,9 +1070,6 @@ main() {
   # Enable color output for pacman and specify the number of parallel downloads
   arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
 
-  # Install the gui packages
-  arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --needed --noconfirm --quiet
-
   install_and_configure_grub "$my_root_mount"
 
   enable_services "$my_root_mount" "${services_to_enable[@]}"
@@ -1022,79 +1078,73 @@ main() {
 
   update_mkinitcpio "$my_root_mount"
 
-  # endregion - completed function calls
-
   # Add a user account
   arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s $my_shell -p "$my_password_hash" $my_user_id
-
-  # Install KDE Plasma and sddm
-  arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm plasma kde-applications
   
-  # Enable SDDM display manager
-  arch-chroot $my_root_mount systemctl enable sddm
+  if install_gui_apps; then
 
-  # Apply the Breeze theme to sddm
-  mkdir $my_root_mount/etc/sddm.conf.d/
-  arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
+    # Install KDE Plasma and sddm
+    arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm plasma kde-applications
+    
+    # Enable SDDM display manager
+    arch-chroot $my_root_mount systemctl enable sddm
 
+    # Apply the Breeze theme to sddm
+    mkdir $my_root_mount/etc/sddm.conf.d/
+    arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
+
+    # Install the gui packages
+    arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --needed --noconfirm --quiet
+  fi
+  
   # Install snapper
   arch-chroot $my_root_mount pacman -S --needed --noconfirm snapper snap-pac inotify-tools
 
-  # Configure GRUB for snapshot recovery
-  arch-chroot $my_root_mount sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
-  arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
-  arch-chroot $my_root_mount systemctl enable grub-btrfsd
-  arch-chroot $my_root_mount systemctl enable snapper-boot.timer
+  # # Configure GRUB for snapshot recovery
+  # arch-chroot $my_root_mount sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
+  # arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
+  # arch-chroot $my_root_mount systemctl enable grub-btrfsd
+  # arch-chroot $my_root_mount systemctl enable snapper-boot.timer
+  configure_grub_for_snapshot_recovery "${my_root_mount}"
 
   # Allow root to have ssh access initially for troubleshooting while developing
   arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
-  # Create post install scripts for root
-  mkdir $my_root_mount/root/Scripts
-  arch-chroot $my_root_mount touch /root/Scripts/enable_snapper_snapshots.sh
-  arch-chroot $my_root_mount chmod +x /root/Scripts/enable_snapper_snapshots.sh
-  { echo -e '#!/usr/bin/bash';
-    echo -e 'btrfs subvolume delete /.snapshots/';
-    echo -e 'snapper -c root create-config /';
-    echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
-    echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
-    echo -e 'snapper list-configs';
-  } >> $my_root_mount/root/Scripts/enable_snapper_snapshots.sh
+  # # Create post install scripts for root
+  # mkdir $my_root_mount/root/Scripts
+  # arch-chroot $my_root_mount touch /root/Scripts/enable_snapper_snapshots.sh
+  # arch-chroot $my_root_mount chmod +x /root/Scripts/enable_snapper_snapshots.sh
+  # { echo -e '#!/usr/bin/bash';
+  #   echo -e 'btrfs subvolume delete /.snapshots/';
+  #   echo -e 'snapper -c root create-config /';
+  #   echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
+  #   echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
+  #   echo -e 'snapper list-configs';
+  # } >> $my_root_mount/root/Scripts/enable_snapper_snapshots.sh
 
-  # Create post install scripts for $my_user_id
-  arch-chroot $my_root_mount mkdir /home/$my_user_id/Scripts/
-  arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/enable_yay.sh
-  arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
-  { echo -e '#!/usr/bin/bash';
-    echo -e 'git clone https://aur.archlinux.org/yay.git';
-    echo -e 'pushd yay';
-    echo -e 'makepkg -si';
-    echo -e 'popd';
-    echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
-  } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
+  create_post_install_scripts_for_root "${my_root_mount}"
+
+  # # Create post install scripts for $my_user_id
+  # arch-chroot $my_root_mount mkdir /home/$my_user_id/Scripts/
+  # arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/enable_yay.sh
+  # arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
+  # { echo -e '#!/usr/bin/bash';
+  #   echo -e 'git clone https://aur.archlinux.org/yay.git';
+  #   echo -e 'pushd yay';
+  #   echo -e 'makepkg -si';
+  #   echo -e 'popd';
+  #   echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
+  # } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
+
+  create_post_install_scripts_for_user "${my_root_mount}" "${my_user_id}"
+
+  # endregion - completed function calls
 
   # Enable oh-my-posh in zsh
   echo -e "\neval \"\$(oh-my-posh init zsh)\"" >> "$my_root_mount/home/$my_user_id/.zshrc";
   arch-chroot $my_root_mount chown $my_user_id:$my_user_id /home/$my_user_id/.zshrc
 
-  arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/install_flatpak_apps.sh
-  arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/install_flatpak_apps.sh
-  { echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Keypunch
-    echo -e flatpak install -y --noninteractive flathub net.cozic.joplin_desktop
-    echo -e flatpak install -y --noninteractive flathub org.deluge_torrent.deluge
-    echo -e flatpak install -y --noninteractive flathub com.github.sixpounder.GameOfLife
-    echo -e flatpak install -y --noninteractive flathub io.github.giantpinkrobots.flatsweep
-    echo -e flatpak install -y --noninteractive flathub io.github.shiftey.Desktop
-    echo -e flatpak install -y --noninteractive flathub com.sweethome3d.Sweethome3d
-    echo -e flatpak install -y --noninteractive flathub org.kicad.KiCad
-    echo -e flatpak install -y --noninteractive flathub com.obsproject.Studio
-    echo -e flatpak install -y --noninteractive flathub com.github.artemanufrij.regextester
-    echo -e flatpak install -y --noninteractive flathub org.remmina.Remmina
-    echo -e flatpak install -y --noninteractive flathub org.stellarium.Stellarium
-    echo -e flatpak install -y --noninteractive flathub com.adrienplazas.Metronome
-    echo -e flatpak install -y --noninteractive flathub io.github.nokse22.inspector
-    echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Fretboard
-  } >> $my_root_mount/home/$my_user_id/Scripts/install_flatpak_apps.sh
+  create_script_to_install_flatpack_apps "${my_root_mount}" "${my_user_id}"
 
   arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
@@ -1112,7 +1162,9 @@ main() {
   arch-chroot $my_root_mount passwd root
 
   sync
+  
   umount $my_root_mount || log_error "Failed to unmount root mount point $my_root_mount"
+
   swapoff /dev/system/swap || log_error "Failed to disable swap on /dev"
 
   log_info "Script finished! Please reboot."
