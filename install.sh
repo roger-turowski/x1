@@ -157,7 +157,7 @@ readonly pacstrap_pkgs=(
   zsh
   zsh-completions
 )
-readonly podman_pkgs(
+readonly podman_pkgs=(
   # Podman related packages
   buildah 
   conmon # Required for podman
