@@ -83,21 +83,35 @@ readonly preinstall_pkgs=(
 readonly pacstrap_pkgs=(
   # Packages to install using pacstrap. Must not be readonly.
   # Omit CPU firmware since we will detect the CPU type and add it later.
+  acpi
+  acpi_call
+  acpid
+  alsa-firmware
+  alsa-utils
+  avahi
   base
   base-devel
   bash-completion
   bat
+  bluez
+  bluez-utils
   btop
   btrfs-progs
   cmatrix
   cowsay
   cryptsetup
+  cups
+  dialog
   dnsmasq
+  dnsutils
   dosfstools
   e2fsprogs
+  edk2-ovmf
   efibootmgr
   eza
   fastfetch
+  firewalld
+  flatpak
   fzf
   git
   grub
@@ -112,8 +126,12 @@ readonly pacstrap_pkgs=(
   linux-lts-headers
   lvm2
   mc
+  mtools
   nano
   networkmanager
+  nfs-utils
+  nss-mdns
+  ntfs-3g
   nmap
   nvim
   openbsd-netcat
@@ -122,57 +140,40 @@ readonly pacstrap_pkgs=(
   plocate
   reflector
   rsync
+  sof-firmware
   sudo
+  terminus-font
   thin-provisioning-tools
+  tlp
   tmux
   util-linux
+  vde2
   vifm
   vim
   whois
+  wpa_supplicant
+  xdg-utils
   zellij
   zsh
   zsh-completions
 )
 readonly gui_pkgs=(
   # Packages to install for the GUI environment
-  acpi
-  acpi_call
-  acpid
   alacritty
-  alsa-firmware
-  alsa-utils
   archlinux-wallpaper
-  avahi
-  bluez
-  bluez-utils
   calibre
   code
-  cups
-  dialog
-  dnsutils
-  edk2-ovmf
-  efibootmgr
-  firewalld
-  flatpak
   gimp
   gvfs
   gvfs-smb
   inkscape
   kitty
   libreoffice-fresh
-  lvm2
   meld
-  mtools
   network-manager-applet
-  nfs-utils
-  nss-mdns
-  ntfs-3g
   pulseaudio
   scribus
-  sof-firmware
   strawberry
-  terminus-font
-  tlp
   ttf-0xproto-nerd
   ttf-cascadia-code-nerd
   ttf-cascadia-mono-nerd
@@ -188,12 +189,9 @@ readonly gui_pkgs=(
   ttf-sourcecodepro-nerd
   ttf-terminus-nerd
   ttf-ubuntu-mono-nerd
-  vde2
   vlc
   wireshark-qt
-  wpa_supplicant
   xdg-user-dirs
-  xdg-utils
 )
 readonly services_to_enable=(
   # Services to enable after installation
@@ -314,6 +312,23 @@ configure_pacman_preinstallation() {
   sed -i "s/ParallelDownloads = [0-9]\+/ParallelDownloads = $parallel_downloads/" "$pacman_conf_local"
 
   ok_result "Pacman pre-install configuration updated successfully."
+}
+ask_install_de_native() {
+    PS3="Select an option: "
+    options=("Yes, install Desktop Environment" "No, skip Desktop Environment")
+    
+    select opt in "${options[@]}"; do
+        case $opt in
+            "Yes, install Desktop Environment")
+                return 0
+                ;;
+            "No, skip Desktop Environment")
+                return 1
+                ;;
+            *) 
+                echo "Invalid option $REPLY";;
+        esac
+    done
 }
 teardown_existing_mappings() {
     # Mapper devices are stacked—close the top layer first, then the bottom
@@ -996,6 +1011,7 @@ main() {
   local my_password_hash=""
   local cpu_firmware=""
   local hypervisor_pkgs=""
+  local install_gui_apps
   local -r my_shell="/usr/bin/bash"
   local -r host_domain="vienna.ad"
   local -r efi_partition_size="550M"
@@ -1011,6 +1027,8 @@ main() {
   configure_time_preinstallation "$my_timezone"
   configure_pacman_preinstallation "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
   install_preinstall_pkgs "${preinstall_pkgs[@]}"
+
+  install_gui_apps=$(ask_install_de_native)
 
   if ! install_disk=$(get_install_disk); then
     printf 'No disk selected. Exiting.\n' >&2
@@ -1067,9 +1085,6 @@ main() {
   # Enable color output for pacman and specify the number of parallel downloads
   arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
 
-  # Install the gui packages
-  arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --needed --noconfirm --quiet
-
   install_and_configure_grub "$my_root_mount"
 
   enable_services "$my_root_mount" "${services_to_enable[@]}"
@@ -1080,17 +1095,23 @@ main() {
 
   # Add a user account
   arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s $my_shell -p "$my_password_hash" $my_user_id
-
-  # Install KDE Plasma and sddm
-  arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm plasma kde-applications
   
-  # Enable SDDM display manager
-  arch-chroot $my_root_mount systemctl enable sddm
+  if install_gui_apps; then
 
-  # Apply the Breeze theme to sddm
-  mkdir $my_root_mount/etc/sddm.conf.d/
-  arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
+    # Install KDE Plasma and sddm
+    arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm plasma kde-applications
+    
+    # Enable SDDM display manager
+    arch-chroot $my_root_mount systemctl enable sddm
 
+    # Apply the Breeze theme to sddm
+    mkdir $my_root_mount/etc/sddm.conf.d/
+    arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
+
+    # Install the gui packages
+    arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --needed --noconfirm --quiet
+  fi
+  
   # Install snapper
   arch-chroot $my_root_mount pacman -S --needed --noconfirm snapper snap-pac inotify-tools
 
