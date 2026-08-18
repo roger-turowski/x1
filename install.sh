@@ -576,9 +576,11 @@ create_logical_volumes() {
   log_info "Creating logical volumes on $root_partition"
 
   # Create the logical volumes for root, swap and home
-  lvcreate -l "${root_partition}FREE" -n root system || \
+  # lvcreate -l "${root_partition}FREE" -n root system || \
+  #  log_error "Failed to create root logical volume"
+  lvcreate -l "${root_partition}" -n root system || \
     log_error "Failed to create root logical volume"
-  
+
   lvcreate -L "${swap_size}" -n swap system || \
     log_error "Failed to create swap logical volume"
   
@@ -1017,6 +1019,7 @@ main() {
   local -r efi_partition_size="550M"
   local -r root_partition_size="0" # Use all remaining space for root
   readonly keyboard_layout="us"
+  readonly disk_size_root=128G
   readonly disk_pct_of_free_root=40
   readonly disk_size_swap=4G
   readonly disk_pct_of_free_home=100
@@ -1061,7 +1064,7 @@ main() {
 
   create_volume_group "$my_partition_root"
 
-  create_logical_volumes "${disk_pct_of_free_root}%" "$disk_size_swap" "${disk_pct_of_free_home}%"
+  create_logical_volumes "${disk_size_root}%" "$disk_size_swap" "${disk_pct_of_free_home}%"
 
   format_the_partitions "$my_partition_efi"
 
