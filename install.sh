@@ -60,9 +60,9 @@ readonly my_user_id="roger"
 readonly my_full_name="Roger Turowski"
 # Colors for console output
 readonly success_color="\e[1;32m"
-readonly error_color="\e[1;31m"
-readonly warning_color="\e[1;33m"
-readonly info_color="\e[1;34m"
+# readonly error_color="\e[1;31m"
+# readonly warning_color="\e[1;33m"
+# readonly info_color="\e[1;34m"
 readonly no_color="\e[0m"
 # Mount options for BTRFS subvolumes
 readonly MOUNTOPTS="noatime,ssd,space_cache=v2,compress=zstd,discard=async"
@@ -71,10 +71,10 @@ readonly pacman_conf="/etc/pacman.conf"
 readonly pacman_mirrorlist="/etc/pacman.d/mirrorlist"
 readonly pacman_parallel_downloads=7
 readonly pacman_color_output=true
-readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
+# readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
 # Application configuration files
-readonly snapper_conf="/etc/snapper/configs/root" 
-readonly updatedb_conf="/etc/updatedb.conf"
+# readonly snapper_conf="/etc/snapper/configs/root" 
+# readonly updatedb_conf="/etc/updatedb.conf"
 # Packages to install
 readonly preinstall_pkgs=(
   # Packages to install before the main installation
@@ -132,6 +132,21 @@ readonly pacstrap_pkgs=(
   zellij
   zsh
   zsh-completions
+)
+readonly podman_pkgs(
+  # Podman related packages
+  buildah 
+  conmon # Required for podman
+  containernetworking-plugins
+  crun
+  fuse-overlayfs # For podman rootless containers
+  passt # Default network backend for rootless containers
+  podlet # For podman 
+  podman
+  podman-compose
+  shadow # Critical for mapping user IDs in rootless mode
+  skopeo # image building and transferring
+  slirp4netns # For podman rootless containers
 )
 readonly gui_pkgs=(
   # Packages to install for the GUI environment
@@ -212,28 +227,10 @@ readonly services_to_enable=(
 # =============================================================================
 # region - Function Definitions
 # =============================================================================
-error_result() {
-	# [   OK   ]
-  # [  ERR   ]
-  # [  WARN  ]
-  # [  INFO  ]
-  echo -e "[   ${error_color}ERR${no_color}    ] $1"
-	exit 1
-}
-ok_result() {
-	echo -e "[    ${success_color}OK${no_color}    ] $1"
-}
-warning_result() {
-	echo -e "[  ${warning_color}WARN${no_color}   ] $1"
-  read -p -r "Press the Enter key to continue"
-}
-info_result() {
-	echo -e "[   ${info_color}INFO${no_color}   ] $1"
-}
 check_for_root() {
   # Ensure the script is being run by root
   if [[ "$UID" -ne 0 ]]; then
-    error_result "This script must be run as root!"
+    log_error  "This script must be run as root!"
   fi
 }
 _log() {
@@ -298,22 +295,22 @@ configure_pacman_preinstallation() {
   local enable_color="${3:-true}"
 
   if [[ ! -f "$pacman_conf_local" ]]; then
-    error_result "Pacman configuration file not found: $pacman_conf"
+    log_error "Pacman configuration file not found: pacman_conf_local"
   fi
 
   if [[ ! -w "$pacman_conf_local" ]]; then
-    error_result "Pacman configuration file is not writable: $pacman_conf"
+    log_error "Pacman configuration file is not writable: $pacman_conf_local"
   fi
 
   if [[ "$enable_color" == true ]]; then
     sed -i 's/#Color/Color/' "$pacman_conf_local"
   else
-    sed -i 's/Color/#Color/' "$pacman_conf"
+    sed -i 's/Color/#Color/' "$pacman_conf_local"
   fi
 
   sed -i "s/ParallelDownloads = [0-9]\+/ParallelDownloads = $parallel_downloads/" "$pacman_conf_local"
 
-  ok_result "Pacman pre-install configuration updated successfully."
+  log_info "Pacman pre-install configuration updated successfully."
 }
 teardown_existing_mappings() {
     # Mapper devices are stacked—close the top layer first, then the bottom
@@ -454,10 +451,10 @@ make_password_hash() {
 
   case $my_password_hash in
     "$my_password_hash_confirmed")
-      ok_result "Password confirmed"
+      log_info  "Password confirmed"
       ;;
     *)
-      error_result "Password not confirmed"
+     log_error "Password not confirmed"
       ;;
   esac
   printf 'Password hash generated: %s for user %s\n' "$my_password_hash" "$my_user_id" >&2
@@ -817,8 +814,7 @@ sudo_enable_wheel_group() {
   cat "$root_mount/etc/sudoers" > "$SUDOER_TMP"
   sed -i -e 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' "$SUDOER_TMP" || \
     log_error "Failed to enable sudo for wheel group in $root_mount/etc/sudoers"
-  visudo -c -f "$SUDOER_TMP" && cat "$SUDOER_TMP" > "$root_mount/etc/sudoers" || \
-    log_error "Sudoers file validation failed after enabling wheel group"
+  visudo -c -f "$SUDOER_TMP" && cat "$SUDOER_TMP" > "$root_mount/etc/sudoers"
   rm "$SUDOER_TMP" || log_error "Failed to remove temporary sudoers file $SUDOER_TMP"
 
   log_info "Wheel group sudo enabled successfully"
@@ -870,21 +866,6 @@ detect_gpu() {
         ;;
     esac
 }
-configure_grub_nvidia() {
-    local grub_cfg="/etc/default/grub"
-    local target_params="nvidia-drm.modeset=1"
-    
-    # Check if parameter already exists to avoid duplicates
-    if ! grep -q "$target_params" "$grub_cfg"; then
-        sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"\(.*\)\"/GRUB_CMDLINE_LINUX_DEFAULT=\"\1 $target_params\"/" "$grub_cfg"
-        log_info "Added kernel parameters for NVIDIA."
-        
-        # Regenerate GRUB config
-        grub-mkconfig -o /boot/grub/grub.cfg
-    else
-        log_info "NVIDIA kernel parameters already present."
-    fi
-}
 install_gpu_drivers() {
     local root_mount="$1"
     local gpu_type
@@ -923,6 +904,29 @@ install_gpu_drivers() {
     arch-chroot "$root_mount" mkinitcpio -P
     
     log_info "Driver installation complete. Reboot required."
+}
+configure_grub_nvidia() {
+  local root_mount="$1"
+  local grub_config="/etc/default/grub"
+  local grub_cfg="/etc/default/grub"
+  local target_params="nvidia-drm.modeset=1"
+  
+  arch-chroot $root_mount bash grub_config $grub_cfg $target_params << CHROOT_EOF
+  # Check if parameter already exists to avoid duplicates
+  if ! grep -q "$target_params" "$grub_cfg"; then
+    sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"\(.*\)\"/GRUB_CMDLINE_LINUX_DEFAULT=\"\1 $target_params\"/" "$grub_cfg"
+    echo "Added kernel parameters for NVIDIA."
+    
+    # Regenerate GRUB config
+    grub-mkconfig -o /boot/grub/grub.cfg
+  else
+    echo "NVIDIA kernel parameters already present."
+  fi
+CHROOT_EOF
+}
+install_podman() {
+  root_mount="$1"
+  arch-chroot $root_mount usermod --add-subuids 100000-165536 --add-subgids 100000-165536 $USER
 }
 # endregion - Function Definitions
 # =============================================================================
@@ -1018,7 +1022,7 @@ main() {
 
   update_mkinitcpio "$my_root_mount"
 
-# endregion - completed function calls
+  # endregion - completed function calls
 
   # Add a user account
   arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s $my_shell -p "$my_password_hash" $my_user_id
@@ -1045,7 +1049,7 @@ main() {
   # Allow root to have ssh access initially for troubleshooting while developing
   arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
-  # Create post-install scripts for root
+  # Create post install scripts for root
   mkdir $my_root_mount/root/Scripts
   arch-chroot $my_root_mount touch /root/Scripts/enable_snapper_snapshots.sh
   arch-chroot $my_root_mount chmod +x /root/Scripts/enable_snapper_snapshots.sh
