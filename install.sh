@@ -577,17 +577,14 @@ create_volume_group() {
 create_physical_volumes() {
   local root_partition="$1"
 
+  # Tear down any device-mapper mappings holding the partition
+  vgchange -an 2>/dev/null || true
+  dmsetup remove_all 2>/dev/null || true
 
   # Force unmount any auto-mounted filesystems
   log_info "Ensuring $root_partition is unmounted"
   umount -R "$root_partition" 2>/dev/null || true
   umount "$root_partition" 2>/dev/null || true
-
-  # Also check for mountpoints via lsblk
-  if lsblk -n -o MOUNTPOINT "$root_partition" 2>/dev/null | grep -q .; then
-    log_warn "Partition appears mounted. Forcing unmount..."
-    umount -Rf "$root_partition" || log_error "Failed to unmount $root_partition"
-  fi
 
   # Wipe the physical partition — destroys signatures lurking in the
   # LVM header region that won't be covered by any LV
