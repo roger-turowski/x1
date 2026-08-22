@@ -608,6 +608,12 @@ create_logical_volumes() {
 format_the_partitions() {
   local my_partition_efi="$1"
 
+  # Wipe all signatures on every LV before formatting
+  wipefs --all --force "$my_partition_efi" 2>/dev/null || true
+  wipefs --all --force /dev/system/root 2>/dev/null || true
+  wipefs --all --force /dev/system/home 2>/dev/null || true
+  wipefs --all --force /dev/system/swap 2>/dev/null || true
+
   # Format the EFI partition
   mkfs.fat -n EFI -F32 "$my_partition_efi" || \
     log_error "Failed to format EFI partition $my_partition_efi"
