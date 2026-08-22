@@ -591,7 +591,7 @@ create_logical_volumes() {
   local swap_size="$2"
   local home_size="$3"
 
-  log_info "Creating logical volumes on $root_size"
+  log_info "Creating logical volumes"
 
   # Create the logical volumes for root, swap and home
   # lvcreate -l "${root_partition}FREE" -n root system || \
@@ -608,11 +608,15 @@ create_logical_volumes() {
 format_the_partitions() {
   local my_partition_efi="$1"
 
+  # Physically destroy all signatures on LVs — wipefs alone isn't enough
+  # on recreated LVs mapped to extents with old filesystem data
+  for lv in /dev/system/root /dev/system/home /dev/system/swap; do
+    blkdiscard "$lv" 2>/dev/null || true
+    dd if=/dev/zero of="$lv" bs=1M count=10 oflag=direct 2>/dev/null || true
+  done
+
   # Wipe all signatures on every LV before formatting
   wipefs --all --force "$my_partition_efi" 2>/dev/null || true
-  wipefs --all --force /dev/system/root 2>/dev/null || true
-  wipefs --all --force /dev/system/home 2>/dev/null || true
-  wipefs --all --force /dev/system/swap 2>/dev/null || true
 
   # Format the EFI partition
   mkfs.fat -n EFI -F32 "$my_partition_efi" || \
@@ -1039,7 +1043,7 @@ main() {
   local -r efi_partition_size="550M"
   local -r root_partition_size="0" # Use all remaining space for root
   readonly keyboard_layout="us"
-  readonly disk_size_root=80G
+  readonly disk_size_root=128G
   # readonly disk_pct_of_free_root=40
   readonly disk_size_swap=4G
   readonly disk_pct_of_free_home=100
