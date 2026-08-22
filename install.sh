@@ -368,7 +368,7 @@ teardown_existing_mappings() {
     local mountpoint
     for mountpoint in $(lsblk -ln -o MOUNTPOINT "$disk" 2>/dev/null | grep -v '^$'); do
         log_info "Unmounting ${mountpoint}"
-        umount -R "$mountpoint" 2>/dev/null || true
+        umount -Rf "$mountpoint" 2>/dev/null || true
     done
 
     log_info "Mapping teardown complete for ${disk}"
@@ -577,13 +577,24 @@ create_volume_group() {
 create_physical_volumes() {
   local root_partition="$1"
 
-  log_info "Creating physical volume on $root_partition"
+
+  # Force unmount any auto-mounted filesystems
+  log_info "Ensuring $root_partition is unmounted"
+  umount -R "$root_partition" 2>/dev/null || true
+  umount "$root_partition" 2>/dev/null || true
+
+  # Also check for mountpoints via lsblk
+  if lsblk -n -o MOUNTPOINT "$root_partition" 2>/dev/null | grep -q .; then
+    log_warn "Partition appears mounted. Forcing unmount..."
+    umount -Rf "$root_partition" || log_error "Failed to unmount $root_partition"
+  fi
 
   # Wipe the physical partition — destroys signatures lurking in the
   # LVM header region that won't be covered by any LV
   wipefs --all --force "$root_partition" 2>/dev/null || true
   dd if=/dev/zero of="$root_partition" bs=1M count=10 || true
   
+  log_info "Creating physical volume on $root_partition"
   # Create a physical volume to contain the volume group "system"
   pvcreate -ff "$root_partition" || \
     log_error "Failed to create physical volume on $root_partition"
@@ -1070,6 +1081,10 @@ main() {
   if ! install_disk=$(get_install_disk); then
     printf 'No disk selected. Exiting.\n' >&2
     exit 1
+  fi
+
+  if mountpoint -q "/dev/$install_disk" || mount | grep -q "$install_disk"; then
+      log_error "$install_disk or its partitions are currently mounted. Unmount manually and rerun."
   fi
 
   build_partition_paths "$install_disk" my_disk my_partition_efi my_partition_root
