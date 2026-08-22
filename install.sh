@@ -1226,7 +1226,7 @@ main() {
   read -rp "Proceed? [y/N]: " confirm
   case "$confirm" in
     y|Y) ;;
-    *) log_error "Cancelled"; exit 1 ;;
+    *) log_error "Cancelled";;
   esac
 
   make_password_hash  my_password_hash
