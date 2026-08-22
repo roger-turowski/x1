@@ -1059,7 +1059,7 @@ main() {
   localectl set-keymap ${keyboard_layout}
 
   # Set-up the fastest Arch mirrors
-  reflector -c us -p https --age 6 --country us --number 5 --latest 8 --sort rate --verbose --save "${pacman_mirrorlist}"
+  reflector --age 6 --country us --latest 8 --number 5 --protocol https --sort rate --verbose --save "${pacman_mirrorlist}"
 
   wipe_disk_signatures "$my_disk"
 
@@ -1086,13 +1086,12 @@ main() {
 
   mount_partitions "$my_root_mount" "$my_partition_efi"
 
-  # Install base packages
-  pacstrap $my_root_mount "${pacstrap_pkgs[@]}" "$cpu_firmware" "$hypervisor_pkgs"
+  pacstrap $my_root_mount "${pacstrap_pkgs[@]}" "$cpu_firmware" "$hypervisor_pkgs" || \
+    log_error "Failed to install base packages"
+  
+  genfstab -U $my_root_mount >> $my_root_mount/etc/fstab || \
+    log_error "Failed to generate the File System TABle (fstab) using UUID numbers"
 
-  # Generate the File System TABle (fstab) using UUID numbers
-  genfstab -U $my_root_mount >> $my_root_mount/etc/fstab
-
-  # Begin arch-chroot operations
   install_gpu_drivers "$my_root_mount"
  
   configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name" "$host_domain"
