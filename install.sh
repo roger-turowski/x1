@@ -550,20 +550,16 @@ create_physical_partitions() {
 
   log_info "Creating physical partitions on $disk"
 
-  # Create the physical EFI partition
-  sgdisk --new=1:0:+"${efi_size}" --typecode=1:ef00 --change-name=1:EFI "${disk}" || \
-    log_error "Failed to create physical EFI partition on $disk"
-  partprobe "$disk"
-  udevadm settle --timeout=10
-  
-  sgdisk --new=2:0:+"${root_size}" --typecode=2:8e00 --change-name=2:root "$disk" || \
-    log_error "Failed to create physical root partition on $disk"
+  sgdisk \
+    --new=1:0:+"${efi_size}"   --typecode=1:ef00 --change-name=1:EFI \
+    --new=2:0:+"${root_size}"  --typecode=2:8e00 --change-name=2:root \
+    "${disk}" || log_error "Failed to create physical partitions on $disk"
+
   partprobe "$disk"
   udevadm settle --timeout=10
 
   # Display a disk summary
   log_info "Disk summary for $my_disk: $(partprobe -s "$my_disk")"
-
 }
 create_volume_group() {
   local root_partition="$1"
