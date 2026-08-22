@@ -306,7 +306,7 @@ configure_pacman_preinstallation() {
 
   log_info "Pacman pre-install configuration updated successfully."
 
-  pacman -Sy archlinux-keyring
+  pacman --noconfirm --quiet -Sy archlinux-keyring
 }
 ask_install_de_native() {
   PS3="Select an option: "
@@ -387,6 +387,10 @@ wipe_disk_signatures() {
   swapoff -a 2>/dev/null || true
   # Tear down existing LUKS/LVM layers first
   teardown_existing_mappings "$disk"
+  dmsetup remove_all 2>/dev/null || true
+
+  # NVMe-specific: secure erase before traditional wipe
+  nvme_secure_erase "$disk"
 
   # Wipe each partition
   local partition
@@ -545,6 +549,26 @@ configure_time_preinstallation() {
   timedatectl set-timezone "$timezone"
   timedatectl set-ntp true
   log_info "Time zone set to $timezone and NTP enabled"
+}
+nvme_secure_erase() {
+  local disk="$1"
+
+  if [[ "$disk" =~ nvme ]]; then
+    log_info "Performing NVMe secure erase on $disk"
+
+    # Ensure nvme-cli is available
+    pacman -Q nvme-cli &>/dev/null || pacman -Sy --noconfirm nvme-cli
+
+    # Format the namespace — ses=1 zeros all user data
+    nvme format "$disk" --ses=1 -f || log_error "NVMe secure erase failed on $disk"
+
+    # Wait for completion and re-read partition table
+    sleep 2
+    partprobe "$disk"
+    udevadm settle --timeout=10
+
+    log_info "NVMe secure erase complete on $disk"
+  fi
 }
 create_physical_partitions() {
   local disk="$1"
