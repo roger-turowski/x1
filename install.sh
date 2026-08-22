@@ -1148,9 +1148,14 @@ main() {
 
   mount_partitions "$my_root_mount" "$my_partition_efi"
 
-  pacstrap $my_root_mount "${pacstrap_pkgs[@]}" $cpu_firmware $hypervisor_pkgs || \
-    log_error "Failed to install base packages"
+  cp "${pacman_mirrorlist}" "${my_root_mount}/${pacman_mirrorlist}"
   
+  local -a all_pkgs=("${pacstrap_pkgs[@]}")
+  [[ -n "$cpu_firmware" ]] && all_pkgs+=("$cpu_firmware")
+  [[ -n "$hypervisor_pkgs" ]] && all_pkgs+=("$hypervisor_pkgs")
+  pacstrap $my_root_mount "${all_pkgs[@]}" || \
+    log_error "Failed to install base packages with pacstrap"
+
   genfstab -U $my_root_mount >> $my_root_mount/etc/fstab || \
     log_error "Failed to generate the File System TABle (fstab) using UUID numbers"
 
