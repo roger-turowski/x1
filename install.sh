@@ -305,6 +305,8 @@ configure_pacman_preinstallation() {
   sed -i "s/ParallelDownloads = [0-9]\+/ParallelDownloads = $parallel_downloads/" "$pacman_conf_local"
 
   log_info "Pacman pre-install configuration updated successfully."
+
+  pacman -Sy archlinux-keyring
 }
 ask_install_de_native() {
   PS3="Select an option: "
