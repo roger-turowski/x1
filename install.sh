@@ -382,6 +382,7 @@ wipe_disk_signatures() {
     log_error "${disk} is not a block device"
   fi
 
+  swapoff -a 2>/dev/null || true
   # Tear down existing LUKS/LVM layers first
   teardown_existing_mappings "$disk"
 
@@ -578,6 +579,7 @@ create_physical_volumes() {
   local root_partition="$1"
 
   # Tear down any device-mapper mappings holding the partition
+  swapoff -a 2>/dev/null || true
   vgchange -an 2>/dev/null || true
   dmsetup remove_all 2>/dev/null || true
 
