@@ -1050,7 +1050,7 @@ main() {
   localectl set-keymap ${keyboard_layout}
 
   # Set-up the fastest Arch mirrors
-  reflector -c us -p https --age 6 --number 5 --latest 8 --sort rate --verbose --save "$pacman_mirrorlist}"
+  reflector -c us -p https --age 6 --country us --number 5 --latest 8 --sort rate --verbose --save "$pacman_mirrorlist}"
 
   wipe_disk_signatures "$my_disk"
 
