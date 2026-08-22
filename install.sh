@@ -305,7 +305,8 @@ configure_pacman_preinstallation() {
   sed -i "s/ParallelDownloads = [0-9]\+/ParallelDownloads = $parallel_downloads/" "$pacman_conf_local"
 
   log_info "Pacman pre-install configuration updated successfully."
-
+  # Set-up the fastest Arch mirrors
+  reflector --age 6 --country us --latest 8 --number 5 --protocol https --sort rate --verbose --save "${pacman_mirrorlist}"
   pacman --noconfirm --quiet -Sy archlinux-keyring
 }
 ask_install_de_native() {
@@ -476,9 +477,12 @@ get_partition_sizes() {
   local -n out_part_size="$5"
 
   local total_bytes
-  total_bytes=$(blockdev --getsz "$disk" 2>/dev/null) || {
+
+  total_bytes=$(lsblk -b -d -n -o SIZE "$disk" 2>/dev/null) || {
     log_error "Could not determine disk size for $disk"
   }
+
+  total_bytes=$(echo "$total_bytes" | tr -dc '0-9')
 
   local total_gb=$((total_bytes / 1024 / 1024 / 1024))
   log_info "Total disk size: ${total_gb}GB"
@@ -668,6 +672,8 @@ create_physical_partitions() {
   local disk="$1"
   local efi_size="$2"
   local root_size="$3"
+  local efi_part="$4"
+  local root_part="$5"
 
   log_info "Creating physical partitions on $disk"
 
@@ -683,8 +689,8 @@ create_physical_partitions() {
   log_info "Disk summary for $my_disk: $(partprobe -s "$my_disk")"
 
   # CRITICAL: Wipe signatures on newly-created partitions before PV creation
-  wipefs --all --force "${disk}p1" || log_error "Failed to wipe EFI partition signature"
-  wipefs --all --force "${disk}p2" || log_error "Failed to wipe root partition signature"
+  wipefs --all --force "$efi_part" || log_error "Failed to wipe EFI partition signature"
+  wipefs --all --force "$root_part" || log_error "Failed to wipe root partition signature"
 
   log_info "Partition signatures wiped, ready for LVM"
 }
@@ -723,7 +729,7 @@ create_logical_volumes() {
   local swap_size="$2"
   local home_size="$3"
 
-  log_info "Creating logical volumes"
+  log_info "Creating logical volumes (root: $root_size, swap: $swap_size, home: $home_size)"
 
   # Create the logical volumes for root, swap and home
   # lvcreate -l "${root_partition}FREE" -n root system || \
@@ -734,7 +740,21 @@ create_logical_volumes() {
   lvcreate -L "${swap_size}" -n swap system || \
     log_error "Failed to create swap logical volume"
   
-  lvcreate -l "${home_size}FREE" -n home system || \
+  # Check if enough space remains for the requested home size
+  local free_pe
+  free_pe=$(vgs --noheadings --units n -o vg_free_count system 2>/dev/null | tr -dc '0-9')
+  local free_mb=$((free_pe * 4))
+
+  log_info "Remaining free space in VG: ${free_mb}MiB"
+
+  # Allocate home — use 100%FREE so no rounding mismatch
+  # but warn if it's significantly less than requested
+  local requested_mb=$((${home_size%GB} * 1024))
+  if (( free_mb < requested_mb )); then
+    log_warn "Home will be ${free_mb}MiB — less than requested ${requested_mb}MiB due to PE rounding"
+  fi
+
+  lvcreate -l 100%FREE -n home system || \
     log_error "Failed to create home logical volume"
 }
 format_the_partitions() {
@@ -1250,7 +1270,7 @@ main() {
   # Prepare the disk for installation
   # create_physical_partitions "$my_disk" "$efi_partition_size" "$root_partition_size"
   # Create partitions with calculated size
-  create_physical_partitions "$my_disk" "$efi_partition_size" "$PARTITION_SIZE"
+  create_physical_partitions "$my_disk" "$efi_partition_size" "$PARTITION_SIZE" "$my_partition_efi" "$my_partition_root"
 
   create_physical_volumes "$my_partition_root"
 
