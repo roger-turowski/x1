@@ -380,7 +380,6 @@ wipe_disk_signatures() {
   # Validate
   if [[ ! -b "$disk" ]]; then
     log_error "${disk} is not a block device"
-    return 1
   fi
 
   # Tear down existing LUKS/LVM layers first
@@ -408,7 +407,6 @@ install_preinstall_pkgs() {
   log_info "Installing required preinstall packages"
   pacman --needed --noconfirm -Sy "${pkgs[@]}" || {
     log_error "Failed to install required preinstall packages: $*"
-    return 1
   }
   log_info "Required preinstall packages installed successfully"
 }
@@ -686,25 +684,25 @@ mount_subvolumes() {
   local mount_opts="$2"
 
   # Options used for all mounts utilizing an SSD
-  mount /dev/mapper/system-root $my_root_mount -o subvol=@,"${mount_opts}" || \
+  mount /dev/mapper/system-root "$root_mount" -o subvol=@,"${mount_opts}" || \
     log_error "Failed to mount subvolume @ to $my_root_mount"
-  mount /dev/mapper/system-root $my_root_mount/.snapshots -o subvol=@/.snapshots,"${mount_opts}" || \
+  mount /dev/mapper/system-root "$root_mount/.snapshots" -o subvol=@/.snapshots,"${mount_opts}" || \
     log_error "Failed to mount subvolume .snapshots to $my_root_mount"
-  mount /dev/mapper/system-root $my_root_mount/boot/grub2/i386-pc -o subvol=@/boot/grub2/i386-pc,"${mount_opts}" || \
+  mount /dev/mapper/system-root "$root_mount/boot/grub2/i386-pc" -o subvol=@/boot/grub2/i386-pc,"${mount_opts}" || \
     log_error "Failed to mount subvolume @/boot/grub2/i386-pc to $my_root_mount"
-  mount /dev/mapper/system-root $my_root_mount/boot/grub2/x86_64-efi -o subvol=@/boot/grub2/x86_64-efi,"${mount_opts}" || \
+  mount /dev/mapper/system-root "$root_mount/boot/grub2/x86_64-efi" -o subvol=@/boot/grub2/x86_64-efi,"${mount_opts}" || \
     log_error "Failed to mount subvolume @/boot/grub2/x86_64-efi to $my_root_mount"
-  mount /dev/mapper/system-root $my_root_mount/opt -o subvol=@/opt,"${mount_opts}" || \
+  mount /dev/mapper/system-root "$root_mount/opt" -o subvol=@/opt,"${mount_opts}" || \
     log_error "Failed to mount subvolume @/opt to $my_root_mount"
-  mount /dev/mapper/system-root $my_root_mount/root -o subvol=@/root,"${mount_opts}"|| \
+  mount /dev/mapper/system-root "$root_mount/root" -o subvol=@/root,"${mount_opts}"|| \
     log_error "Failed to mount subvolume @/root to $my_root_mount"
-  mount /dev/mapper/system-root $my_root_mount/srv -o subvol=@/srv,"${mount_opts}"|| \
+  mount /dev/mapper/system-root "$root_mount/srv" -o subvol=@/srv,"${mount_opts}"|| \
     log_error "Failed to mount subvolume @/srv to $my_root_mount"
-  mount /dev/mapper/system-root $my_root_mount/tmp -o subvol=@/tmp,"${mount_opts}"|| \
+  mount /dev/mapper/system-root "$root_mount/tmp" -o subvol=@/tmp,"${mount_opts}"|| \
     log_error "Failed to mount subvolume @/tmp to $my_root_mount"
-  mount /dev/mapper/system-root $my_root_mount/usr/local -o subvol=@/usr/local,"${mount_opts}"|| \
+  mount /dev/mapper/system-root "$root_mount/usr/local" -o subvol=@/usr/local,"${mount_opts}"|| \
     log_error "Failed to mount subvolume @/usr/local to $my_root_mount"
-  mount /dev/mapper/system-root $my_root_mount/var -o subvol=@/var,"${mount_opts}"|| \
+  mount /dev/mapper/system-root "$root_mount/var" -o subvol=@/var,"${mount_opts}"|| \
     log_error "Failed to mount subvolume @/var to $my_root_mount"
 }
 mount_partitions() {
@@ -1219,5 +1217,4 @@ main() {
 # =============================================================================
 main "$@" || {
   log_error "Installation failed. Please check the logs for details."
-  exit 1
 }
