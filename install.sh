@@ -579,9 +579,11 @@ create_physical_volumes() {
 
   log_info "Creating physical volume on $root_partition"
 
-  # Double-wipe in case sgdisk left partial metadata
+  # Wipe the physical partition — destroys signatures lurking in the
+  # LVM header region that won't be covered by any LV
   wipefs --all --force "$root_partition" 2>/dev/null || true
-
+  dd if=/dev/zero of="$root_partition" bs=1M count=10 || true
+  
   # Create a physical volume to contain the volume group "system"
   pvcreate -ff "$root_partition" || \
     log_error "Failed to create physical volume on $root_partition"
