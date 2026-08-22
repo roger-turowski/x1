@@ -468,6 +468,100 @@ build_partition_paths() {
   out_root="${prefix}2"
   printf 'Partition paths built:\nDisk: %s\nEFI:  %s\nRoot: %s\n' "$out_disk" "$out_efi" "$out_root" >&2
 }
+get_partition_sizes() {
+  local disk="$1"
+  local -n out_root="$2"
+  local -n out_swap="$3"
+  local -n out_home="$4"
+  local -n out_part_size="$5"
+
+  local total_bytes
+  total_bytes=$(blockdev --getsz "$disk" 2>/dev/null) || {
+    log_error "Could not determine disk size for $disk"
+  }
+
+  local total_gb=$((total_bytes / 1024 / 1024 / 1024))
+  log_info "Total disk size: ${total_gb}GB"
+
+  out_swap="4G"
+
+  # Get root size
+  local response
+  while true; do
+    read -rp "Root (/) size (e.g., '50%' or '80GB'): " response
+    if [[ -z "$response" ]]; then
+      echo "Input cannot be empty." >&2
+      continue
+    fi
+    if [[ "$response" =~ ^([0-9]+)%$ ]]; then
+      local pct="${BASH_REMATCH[1]}"
+      if (( pct < 10 || pct > 100 )); then
+        echo "Percentage must be between 10% and 100%." >&2
+        continue
+      fi
+      local pct_bytes=$((total_bytes * pct / 100))
+      out_root="$((pct_bytes / 1024 / 1024 / 1024))GB"
+      break
+    elif [[ "$response" =~ ^([0-9]+)(TB|GB)$ ]]; then
+      local num="${BASH_REMATCH[1]}"
+      local unit="${BASH_REMATCH[2]}"
+      if (( num < 10 )); then
+        echo "Minimum root size is 10GB." >&2
+        continue
+      fi
+      if [[ "$unit" == "TB" ]]; then
+        out_root="$((num * 1024))GB"
+      else
+        out_root="${num}GB"
+      fi
+      break
+    else
+      echo "Invalid format. Use '50%' or '100GB'." >&2
+    fi
+  done
+
+  # Get home size
+  while true; do
+    read -rp "Home (/home) size (e.g., '30%' or '150GB'): " response
+    if [[ -z "$response" ]]; then
+      echo "Input cannot be empty." >&2
+      continue
+    fi
+    if [[ "$response" =~ ^([0-9]+)%$ ]]; then
+      local pct="${BASH_REMATCH[1]}"
+      if (( pct < 5 || pct > 100 )); then
+        echo "Percentage must be between 5% and 100%." >&2
+        continue
+      fi
+      local pct_bytes=$((total_bytes * pct / 100))
+      out_home="$((pct_bytes / 1024 / 1024 / 1024))GB"
+      break
+    elif [[ "$response" =~ ^([0-9]+)(TB|GB)$ ]]; then
+      local num="${BASH_REMATCH[1]}"
+      local unit="${BASH_REMATCH[2]}"
+      if (( num < 10 )); then
+        echo "Minimum home size is 10GB." >&2
+        continue
+      fi
+      if [[ "$unit" == "TB" ]]; then
+        out_home="$((num * 1024))GB"
+      else
+        out_home="${num}GB"
+      fi
+      break
+    else
+      echo "Invalid format. Use '30%' or '150GB'." >&2
+    fi
+  done
+
+  # Calculate total partition size (root + swap + home, numeric only)
+  local root_gb="${out_root%GB}"
+  local home_gb="${out_home%GB}"
+  local swap_gb="${out_swap%G}"
+  out_part_size="$((root_gb + home_gb + swap_gb))GB"
+
+  log_info "Sizes: root=${out_root}, swap=${out_swap}, home=${out_home}, partition=${out_part_size}"
+}
 make_password_hash() {
   # Make a password hash here with mkpasswd and assign to my_password_hash at runtime
   # Generate a salt for the password hash
@@ -1072,19 +1166,22 @@ main() {
   local my_partition_efi=""
   local my_partition_root=""
   local my_password_hash=""
-  local cpu_firmware=""
+  local ROOT_SIZE=""
+  local SWAP_SIZE=""
+  local HOME_SIZE=""
+  local PARTITION_SIZE=""local cpu_firmware=""
   local hypervisor_pkgs=""
   local install_gui_apps
   local install_podman_pkgs
   local -r my_shell="/usr/bin/bash"
   local -r host_domain="vienna.ad"
   local -r efi_partition_size="550M"
-  local -r root_partition_size="0" # Use all remaining space for root
+  # local root_partition_size="0" # Use all remaining space for root
   readonly keyboard_layout="us"
-  readonly disk_size_root=128G
+  #readonly disk_size_root=128G
   # readonly disk_pct_of_free_root=40
-  readonly disk_size_swap=4G
-  readonly disk_pct_of_free_home=100
+  #readonly disk_size_swap=4G
+  #readonly disk_pct_of_free_home=100
 
   # endregion - main variables
   # region - completed function calls
@@ -1092,6 +1189,9 @@ main() {
   configure_time_preinstallation "$my_timezone"
   configure_pacman_preinstallation "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
   install_preinstall_pkgs "${preinstall_pkgs[@]}"
+
+  # Get root size (now interactive)
+  #root_partition_size=$(get_root_partition_size "$my_disk")
 
   # install_gui_apps=$(ask_install_de_native)
   ask_install_de_native
@@ -1113,6 +1213,22 @@ main() {
   fi
 
   build_partition_paths "$install_disk" my_disk my_partition_efi my_partition_root
+
+  get_partition_sizes "$my_disk" ROOT_SIZE SWAP_SIZE HOME_SIZE PARTITION_SIZE
+
+  log_info "Configuration:"
+  log_info "  EFI: $efi_partition_size"
+  log_info "  Root LV: $ROOT_SIZE"
+  log_info "  Swap LV: $SWAP_SIZE"
+  log_info "  Home LV: $HOME_SIZE"
+  log_info "  Partition 2 (PV): $PARTITION_SIZE"
+
+  read -rp "Proceed? [y/N]: " confirm
+  case "$confirm" in
+    y|Y) ;;
+    *) log_error "Cancelled"; exit 1 ;;
+  esac
+
   make_password_hash  my_password_hash
   cpu_firmware=$(determine_cpu_firmware)
   hypervisor_pkgs=$(determine_hypervisor_packages)
@@ -1132,14 +1248,18 @@ main() {
   mdadm --stop --scan
 
   # Prepare the disk for installation
-  create_physical_partitions "$my_disk" "$efi_partition_size" "$root_partition_size"
+  # create_physical_partitions "$my_disk" "$efi_partition_size" "$root_partition_size"
+  # Create partitions with calculated size
+  create_physical_partitions "$my_disk" "$efi_partition_size" "$PARTITION_SIZE"
 
   create_physical_volumes "$my_partition_root"
 
   create_volume_group "$my_partition_root"
 
-  create_logical_volumes "${disk_size_root}" "$disk_size_swap" "${disk_pct_of_free_home}%"
-
+  # create_logical_volumes "${disk_size_root}" "$disk_size_swap" "${disk_pct_of_free_home}%"
+  # Create logical volumes with individual sizes
+  create_logical_volumes "$ROOT_SIZE" "$SWAP_SIZE" "$HOME_SIZE" 
+  
   format_the_partitions "$my_partition_efi"
 
   create_btrfs_subvolumes "$my_root_mount"
