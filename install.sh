@@ -560,6 +560,12 @@ create_physical_partitions() {
 
   # Display a disk summary
   log_info "Disk summary for $my_disk: $(partprobe -s "$my_disk")"
+
+  # CRITICAL: Wipe signatures on newly-created partitions before PV creation
+  wipefs --all --force "${disk}p1" || log_error "Failed to wipe EFI partition signature"
+  wipefs --all --force "${disk}p2" || log_error "Failed to wipe root partition signature"
+
+  log_info "Partition signatures wiped, ready for LVM"
 }
 create_volume_group() {
   local root_partition="$1"
@@ -572,6 +578,10 @@ create_physical_volumes() {
   local root_partition="$1"
 
   log_info "Creating physical volume on $root_partition"
+
+  # Double-wipe in case sgdisk left partial metadata
+  wipefs --all --force "$root_partition" 2>/dev/null || true
+
   # Create a physical volume to contain the volume group "system"
   pvcreate -ff "$root_partition" || \
     log_error "Failed to create physical volume on $root_partition"
