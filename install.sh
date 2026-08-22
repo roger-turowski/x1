@@ -1124,7 +1124,7 @@ main() {
 
   mount_partitions "$my_root_mount" "$my_partition_efi"
 
-  pacstrap $my_root_mount "${pacstrap_pkgs[@]}" "$cpu_firmware" "$hypervisor_pkgs" || \
+  pacstrap $my_root_mount "${pacstrap_pkgs[@]}" $cpu_firmware $hypervisor_pkgs || \
     log_error "Failed to install base packages"
   
   genfstab -U $my_root_mount >> $my_root_mount/etc/fstab || \
