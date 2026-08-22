@@ -159,18 +159,13 @@ readonly pacstrap_pkgs=(
 )
 readonly podman_pkgs=(
   # Podman related packages
-  buildah 
-  conmon # Required for podman
-  containernetworking-plugins
-  crun
-  fuse-overlayfs # For podman rootless containers
-  passt # Default network backend for rootless containers
-  podlet # For podman 
   podman
+  buildah 
+  fuse-overlayfs # For podman rootless containers
+  podman-docker
+  podlet # For podman 
   podman-compose
-  shadow # Critical for mapping user IDs in rootless mode
   skopeo # image building and transferring
-  slirp4netns # For podman rootless containers
 )
 readonly gui_pkgs=(
   # Packages to install for the GUI environment
@@ -311,21 +306,38 @@ configure_pacman_preinstallation() {
   log_info "Pacman pre-install configuration updated successfully."
 }
 ask_install_de_native() {
-    PS3="Select an option: "
-    options=("Yes, install Desktop Environment" "No, skip Desktop Environment")
-    
-    select opt in "${options[@]}"; do
-        case $opt in
-            "Yes, install Desktop Environment")
-                return 0
-                ;;
-            "No, skip Desktop Environment")
-                return 1
-                ;;
-            *) 
-                echo "Invalid option $REPLY";;
-        esac
-    done
+  PS3="Select an option: "
+  options=("Yes, install Desktop Environment" "No, skip Desktop Environment")
+  
+  select opt in "${options[@]}"; do
+    case $opt in
+      "Yes, install Desktop Environment")
+        return 0
+        ;;
+      "No, skip Desktop Environment")
+        return 1
+        ;;
+      *) 
+        echo "Invalid option $REPLY";;
+    esac
+  done
+}
+ask_install_podman_pkgs() {
+  PS3="Select an option: "
+  options=("Yes, install Podman packages" "No, skip Podman packages")
+  
+  select opt in "${options[@]}"; do
+    case $opt in
+      "Yes, install Podman packages")
+        return 0
+        ;;
+      "No, skip Podman packages")
+        return 1
+        ;;
+      *) 
+        echo "Invalid option $REPLY";;
+    esac
+  done
 }
 teardown_existing_mappings() {
     # Mapper devices are stacked—close the top layer first, then the bottom
@@ -566,16 +578,16 @@ create_physical_volumes() {
     log_error "Failed to create physical volume on $root_partition"
 }
 create_logical_volumes() {
-  local root_partition="$1"
+  local root_size="$1"
   local swap_size="$2"
   local home_size="$3"
 
-  log_info "Creating logical volumes on $root_partition"
+  log_info "Creating logical volumes on $root_size"
 
   # Create the logical volumes for root, swap and home
   # lvcreate -l "${root_partition}FREE" -n root system || \
   #  log_error "Failed to create root logical volume"
-  lvcreate -l "${root_partition}" -n root system || \
+  lvcreate -L "${root_size}" -n root system || \
     log_error "Failed to create root logical volume"
 
   lvcreate -L "${swap_size}" -n swap system || \
@@ -996,13 +1008,14 @@ main() {
   local cpu_firmware=""
   local hypervisor_pkgs=""
   local install_gui_apps
+  local install_podman_pkgs
   local -r my_shell="/usr/bin/bash"
   local -r host_domain="vienna.ad"
   local -r efi_partition_size="550M"
   local -r root_partition_size="0" # Use all remaining space for root
   readonly keyboard_layout="us"
-  readonly disk_size_root=128G
-  readonly disk_pct_of_free_root=40
+  readonly disk_size_root=80G
+  # readonly disk_pct_of_free_root=40
   readonly disk_size_swap=4G
   readonly disk_pct_of_free_home=100
 
@@ -1013,8 +1026,16 @@ main() {
   configure_pacman_preinstallation "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
   install_preinstall_pkgs "${preinstall_pkgs[@]}"
 
-  install_gui_apps=$(ask_install_de_native)
-
+  # install_gui_apps=$(ask_install_de_native)
+  ask_install_de_native
+  install_gui_apps=$?
+  log_info "install_gui_apps is ${install_gui_apps}"
+  
+  # install_podman_pkgs=$(ask_install_podman_pkgs)
+  ask_install_podman_pkgs
+  install_podman_pkgs=$?
+  log_info "install_podman_pkgs is ${install_podman_pkgs}"
+  
   if ! install_disk=$(get_install_disk); then
     printf 'No disk selected. Exiting.\n' >&2
     exit 1
@@ -1046,7 +1067,7 @@ main() {
 
   create_volume_group "$my_partition_root"
 
-  create_logical_volumes "${disk_size_root}%" "$disk_size_swap" "${disk_pct_of_free_home}%"
+  create_logical_volumes "${disk_size_root}" "$disk_size_swap" "${disk_pct_of_free_home}%"
 
   format_the_partitions "$my_partition_efi"
 
@@ -1080,11 +1101,18 @@ main() {
 
   # Add a user account
   arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s $my_shell -p "$my_password_hash" $my_user_id
-  
-  if install_gui_apps; then
 
+  if [ "$install_podman_pkgs" -eq 0 ]; then
+    set -x
+    log_info "Installing Podman packages"
+    arch-chroot $my_root_mount pacman -S --needed --noconfirm --quiet "${podman_pkgs[@]}"
+    set +x
+    pause
+  fi
+
+  if [ "$install_gui_apps" -eq 0 ]; then
     # Install KDE Plasma and sddm
-    arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm plasma kde-applications
+    arch-chroot $my_root_mount pacman -S --needed --noconfirm --quiet xorg sddm plasma kde-applications
     
     # Enable SDDM display manager
     arch-chroot $my_root_mount systemctl enable sddm
@@ -1094,11 +1122,14 @@ main() {
     arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
     # Install the gui packages
-    arch-chroot $my_root_mount pacman -Sy "${gui_pkgs[@]}" --needed --noconfirm --quiet
+    arch-chroot $my_root_mount pacman -Sy --needed --noconfirm --quiet "${gui_pkgs[@]}"
+    if [ "$install_podman_pkgs" -eq 0 ]; then
+      arch-chroot $my_root_mount pacman -S --needed --noconfirm --quiet podman-desktop
+    fi
   fi
   
   # Install snapper
-  arch-chroot $my_root_mount pacman -S --needed --noconfirm snapper snap-pac inotify-tools
+  arch-chroot $my_root_mount pacman -S --needed --noconfirm --quiet snapper snap-pac inotify-tools
 
   # # Configure GRUB for snapshot recovery
   # arch-chroot $my_root_mount sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
@@ -1156,14 +1187,14 @@ main() {
   chmod -x $my_root_mount/root/Scripts/install.sh
   cp "$LOG_FILE" $my_root_mount/root/
 
-  clear
+  # (I want to retain the past results for debugging) clear
 
   echo -e "${success_color}Please set a password for the new root account:${no_color}"
   arch-chroot $my_root_mount passwd root
 
   sync
   
-  umount $my_root_mount || log_error "Failed to unmount root mount point $my_root_mount"
+  # (Does not work) umount $my_root_mount || log_error "Failed to unmount root mount point $my_root_mount"
 
   swapoff /dev/system/swap || log_error "Failed to disable swap on /dev"
 
