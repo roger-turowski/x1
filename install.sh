@@ -344,19 +344,28 @@ ask_install_podman_pkgs() {
   done
 }
 teardown_existing_mappings() {
-    # Mapper devices are stacked—close the top layer first, then the bottom
     local disk="$1"
 
     log_info "Tearing down existing mappings on ${disk}"
 
-    # 1. Deactivate LVM volume groups on this disk
-    #    vgchange deactivates all LVs in a VG, closing the /dev/mapper entries
+    swapoff -a 2>/dev/null || true
+
+    # 1. Remove LVM volume groups on this disk
     local vg
     for vg in $(vgs --noheadings --separator ' ' 2>/dev/null | awk '{print $1}'); do
-        # Check if this VG lives on the target disk
         if pvs --noheadings 2>/dev/null | grep -q "$disk"; then
-            log_info "Deactivating volume group: ${vg}"
-            vgchange -an "$vg" || return 1
+            log_info "Removing volume group: ${vg}"
+            lvremove -ff "$vg" 2>/dev/null || true
+            vgremove -ff "$vg" 2>/dev/null || true
+        fi
+    done
+
+    # 1b. Remove physical volumes on this disk
+    local pv
+    for pv in $(pvs --noheadings -o pv_name 2>/dev/null | tr -d ' '); do
+        if [[ "$pv" == "$disk"* ]]; then
+            log_info "Removing physical volume: ${pv}"
+            pvremove -ff "$pv" 2>/dev/null || true
         fi
     done
 
@@ -373,6 +382,9 @@ teardown_existing_mappings() {
         log_info "Unmounting ${mountpoint}"
         umount -Rf "$mountpoint" 2>/dev/null || true
     done
+
+    # 4. Clean up any remaining device-mapper nodes
+    dmsetup remove_all 2>/dev/null || true
 
     log_info "Mapping teardown complete for ${disk}"
 }
