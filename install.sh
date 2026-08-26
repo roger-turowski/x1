@@ -166,6 +166,8 @@ readonly podman_pkgs=(
   podlet # For podman 
   podman-compose
   skopeo # image building and transferring
+  distrobox # Works with Podman
+  python3-pip # Works with Distrobox
 )
 readonly gui_pkgs=(
   # Packages to install for the GUI environment
