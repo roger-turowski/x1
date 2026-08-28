@@ -488,7 +488,8 @@ get_partition_sizes() {
   local -n out_root="$2"
   local -n out_swap="$3"
   local -n out_home="$4"
-  local -n out_part_size="$5"
+  local -n out_data="$5"
+  local -n out_part_size="$6"
 
   local total_bytes
 
@@ -572,13 +573,48 @@ get_partition_sizes() {
     fi
   done
 
+  # Get data size
+  while true; do
+    read -rp "Data (/data) size (e.g., '30%' or '150GB'): " response
+    if [[ -z "$response" ]]; then
+      echo "Input cannot be empty." >&2
+      continue
+    fi
+    if [[ "$response" =~ ^([0-9]+)%$ ]]; then
+      local pct="${BASH_REMATCH[1]}"
+      if (( pct < 5 || pct > 100 )); then
+        echo "Percentage must be between 5% and 100%." >&2
+        continue
+      fi
+      local pct_bytes=$((total_bytes * pct / 100))
+      out_home="$((pct_bytes / 1024 / 1024 / 1024))GB"
+      break
+    elif [[ "$response" =~ ^([0-9]+)(TB|GB)$ ]]; then
+      local num="${BASH_REMATCH[1]}"
+      local unit="${BASH_REMATCH[2]}"
+      if (( num < 10 )); then
+        echo "Minimum data size is 10GB." >&2
+        continue
+      fi
+      if [[ "$unit" == "TB" ]]; then
+        out_data="$((num * 1024))GB"
+      else
+        out_data="${num}GB"
+      fi
+      break
+    else
+      echo "Invalid format. Use '30%' or '150GB'." >&2
+    fi
+  done
+
   # Calculate total partition size (root + swap + home, numeric only)
   local root_gb="${out_root%GB}"
   local home_gb="${out_home%GB}"
+  local data_gb="${out_data%GB}"
   local swap_gb="${out_swap%G}"
-  out_part_size="$((root_gb + home_gb + swap_gb))GB"
+  out_part_size="$((root_gb + home_gb + data_gb +swap_gb))GB"
 
-  log_info "Sizes: root=${out_root}, swap=${out_swap}, home=${out_home}, partition=${out_part_size}"
+  log_info "Sizes: root=${out_root}, swap=${out_swap}, home=${out_home}, data=${out_data},  partition=${out_part_size}"
 }
 make_password_hash() {
   # Make a password hash here with mkpasswd and assign to my_password_hash at runtime
@@ -742,8 +778,9 @@ create_logical_volumes() {
   local root_size="$1"
   local swap_size="$2"
   local home_size="$3"
+  local data_size="$4"
 
-  log_info "Creating logical volumes (root: $root_size, swap: $swap_size, home: $home_size)"
+  log_info "Creating logical volumes (root: $root_size, swap: $swap_size, home: $home_size, data: $data_size)"
 
   # Create the logical volumes for root, swap and home
   # lvcreate -l "${root_partition}FREE" -n root system || \
@@ -763,13 +800,16 @@ create_logical_volumes() {
 
   # Allocate home — use 100%FREE so no rounding mismatch
   # but warn if it's significantly less than requested
-  local requested_mb=$((${home_size%GB} * 1024))
+  local requested_mb=$(((${home_size%GB} + ${data_size%GB}) * 1024))
   if (( free_mb < requested_mb )); then
-    log_warn "Home will be ${free_mb}MiB — less than requested ${requested_mb}MiB due to PE rounding"
+    log_warn "Data will be ${free_mb}MiB — less than requested ${requested_mb}MiB due to PE rounding"
   fi
 
-  lvcreate -l 100%FREE -n home system || \
+  lvcreate -L "${data_size}" -n home system || \
     log_error "Failed to create home logical volume"
+
+  lvcreate -l 100%FREE -n data system || \
+    log_error "Failed to create data logical volume"
 }
 format_the_partitions() {
   local my_partition_efi="$1"
@@ -795,6 +835,10 @@ format_the_partitions() {
   # Format the home volume with xfs
   mkfs.xfs -f -L home /dev/system/home || \
     log_error "Failed to format home logical volume /dev/system/home"
+
+  # Format the data volume with xfs
+  mkfs.xfs -f -L data /dev/system/data || \
+    log_error "Failed to format data logical volume /dev/system/data"
 
   # Create swap space
   wipefs --all --force /dev/system/swap || \
@@ -906,6 +950,11 @@ mount_partitions() {
   mkdir -p "$root_mount/home"
   mount /dev/system/home "$root_mount/home" || \
     log_error "Failed to mount home logical volume /dev/system/home to $root_mount/home"
+
+  # Mount the data logical volume
+  mkdir -p "$root_mount/data"
+  mount /dev/system/data "$root_mount/data" || \
+    log_error "Failed to mount data logical volume /dev/system/data to $root_mount/data"
 }
 configure_time_and_locale() {
   local root_mount="$1"
@@ -1203,6 +1252,7 @@ main() {
   local ROOT_SIZE=""
   local SWAP_SIZE=""
   local HOME_SIZE=""
+  local DATA_SIZE=""
   local PARTITION_SIZE=""local cpu_firmware=""
   local hypervisor_pkgs=""
   local install_gui_apps
@@ -1248,13 +1298,14 @@ main() {
 
   build_partition_paths "$install_disk" my_disk my_partition_efi my_partition_root
 
-  get_partition_sizes "$my_disk" ROOT_SIZE SWAP_SIZE HOME_SIZE PARTITION_SIZE
+  get_partition_sizes "$my_disk" ROOT_SIZE SWAP_SIZE HOME_SIZE DATA_SIZE PARTITION_SIZE
 
   log_info "Configuration:"
   log_info "  EFI: $efi_partition_size"
   log_info "  Root LV: $ROOT_SIZE"
   log_info "  Swap LV: $SWAP_SIZE"
   log_info "  Home LV: $HOME_SIZE"
+  log_info "  Data LV: $DATA_SIZE"
   log_info "  Partition 2 (PV): $PARTITION_SIZE"
 
   read -rp "Proceed? [y/N]: " confirm
@@ -1292,7 +1343,7 @@ main() {
 
   # create_logical_volumes "${disk_size_root}" "$disk_size_swap" "${disk_pct_of_free_home}%"
   # Create logical volumes with individual sizes
-  create_logical_volumes "$ROOT_SIZE" "$SWAP_SIZE" "$HOME_SIZE" 
+  create_logical_volumes "$ROOT_SIZE" "$SWAP_SIZE" "$HOME_SIZE" "$DATA_SIZE"
   
   format_the_partitions "$my_partition_efi"
 
@@ -1360,41 +1411,12 @@ main() {
   # Install snapper
   arch-chroot $my_root_mount pacman -S --needed --noconfirm --quiet snapper snap-pac inotify-tools
 
-  # # Configure GRUB for snapshot recovery
-  # arch-chroot $my_root_mount sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
-  # arch-chroot $my_root_mount grub-mkconfig -o /boot/grub/grub.cfg
-  # arch-chroot $my_root_mount systemctl enable grub-btrfsd
-  # arch-chroot $my_root_mount systemctl enable snapper-boot.timer
   configure_grub_for_snapshot_recovery "${my_root_mount}"
 
   # Allow root to have ssh access initially for troubleshooting while developing
   arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
-  # # Create post install scripts for root
-  # mkdir $my_root_mount/root/Scripts
-  # arch-chroot $my_root_mount touch /root/Scripts/enable_snapper_snapshots.sh
-  # arch-chroot $my_root_mount chmod +x /root/Scripts/enable_snapper_snapshots.sh
-  # { echo -e '#!/usr/bin/bash';
-  #   echo -e 'btrfs subvolume delete /.snapshots/';
-  #   echo -e 'snapper -c root create-config /';
-  #   echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
-  #   echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
-  #   echo -e 'snapper list-configs';
-  # } >> $my_root_mount/root/Scripts/enable_snapper_snapshots.sh
-
   create_post_install_scripts_for_root "${my_root_mount}"
-
-  # # Create post install scripts for $my_user_id
-  # arch-chroot $my_root_mount mkdir /home/$my_user_id/Scripts/
-  # arch-chroot $my_root_mount touch /home/$my_user_id/Scripts/enable_yay.sh
-  # arch-chroot $my_root_mount chmod +x /home/$my_user_id/Scripts/enable_yay.sh
-  # { echo -e '#!/usr/bin/bash';
-  #   echo -e 'git clone https://aur.archlinux.org/yay.git';
-  #   echo -e 'pushd yay';
-  #   echo -e 'makepkg -si';
-  #   echo -e 'popd';
-  #   echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
-  # } >> $my_root_mount/home/$my_user_id/Scripts/enable_yay.sh
 
   create_post_install_scripts_for_user "${my_root_mount}" "${my_user_id}"
 
