@@ -1374,11 +1374,8 @@ main() {
   arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s $my_shell -p "$my_password_hash" $my_user_id
 
   if [ "$install_podman_pkgs" -eq 0 ]; then
-    set -x
     log_info "Installing Podman packages"
     arch-chroot $my_root_mount pacman -S --needed --noconfirm --quiet "${podman_pkgs[@]}"
-    set +x
-    pause
   fi
 
   if [ "$install_gui_apps" -eq 0 ]; then
