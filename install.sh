@@ -805,7 +805,7 @@ create_logical_volumes() {
     log_warn "Data will be ${free_mb}MiB — less than requested ${requested_mb}MiB due to PE rounding"
   fi
 
-  lvcreate -L "${data_size}" -n home system || \
+  lvcreate -L "${home_size}" -n home system || \
     log_error "Failed to create home logical volume"
 
   lvcreate -l 100%FREE -n data system || \
@@ -1162,7 +1162,7 @@ install_gpu_drivers() {
             ;;
         AMD)
             log_info "Installing AMD drivers..."
-            arch-chroot "$root_mount" pacman -S --noconfirm mesa lib32-mesa xf86-video-amdgpu amd-ucode
+            arch-chroot "$root_mount" pacman -S --noconfirm mesa lib32-mesa xf86-video-amdgpu amd-ucode amdgpu_top
             ;;
         Intel)
             log_info "Installing Intel drivers..."
