@@ -1110,33 +1110,24 @@ update_mkinitcpio() {
   log_info "mkinitcpio configuration updated successfully"
 }
 detect_gpu() {
-    # Get PCI IDs. -nn shows numeric IDs. -k shows kernel driver in use.
-    local pci_info
     local vendor_id
+    local device
 
-    pci_info=$(lspci -nn -k | grep -A 3 -E 'VGA|3D')
-    
-    # Extract Vendor ID (first 4 chars after [)
-    # Example: [10de:1b80] -> 10de
-    vendor_id=$(echo "$pci_info" | grep -oP '\[\K[0-9a-f]{4}' | head -1)
-    
+    for device in /sys/bus/pci/devices/*/; do
+        local class
+        class=$(cat "${device}class" 2>/dev/null)
+        # 0x030000 = VGA, 0x030200 = 3D controller, 0x038000 = display
+        if [[ "$class" == "0x030000" ]] || [[ "$class" == "0x030200" ]] || [[ "$class" == "0x038000" ]]; then
+            vendor_id=$(cat "${device}vendor" 2>/dev/null | cut -c3-6)
+            break
+        fi
+    done
+
     case "$vendor_id" in
-      10de)
-        log_info "GPI detected: NVIDIA"
-        printf '%s\n' "NVIDIA"
-          ;;
-      1002)
-        log_info "GPU detected: AMD"
-        printf '%s\n' "AMD"
-        ;;
-      8086)
-        log_info "GPU detected: Intel"
-        printf '%s\n' "Intel"
-        ;;
-      *)
-        log_info "GPU detected: Unknown"
-        printf '%s\n' "Unknown"
-        ;;
+        10de) log_info "GPU detected: NVIDIA"; printf '%s\n' "NVIDIA" ;;
+        1002) log_info "GPU detected: AMD";    printf '%s\n' "AMD" ;;
+        8086) log_info "GPU detected: Intel";  printf '%s\n' "Intel" ;;
+        *)    log_info "GPU detected: Unknown (vendor: ${vendor_id:-none})"; printf '%s\n' "Unknown" ;;
     esac
 }
 install_gpu_drivers() {
