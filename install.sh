@@ -436,12 +436,12 @@ get_install_disk() {
   local disk_confirmation
   local response
   while true; do
-    clear
-	printf "\nCurrent disk layout...\n\n"
-	lsblk -f
+    clear >&2
+	printf "\nCurrent disk layout...\n\n" >&2
+	lsblk -f >&2
 	printf '\nList of disks available:\n' >&2
     lsblk -d -e 11 -e 7 -o name,size >&2
-    printf "\n"
+    printf "\n" >&2
 	read -r -p "Disk to install to: " response
 
     if [[ -z "$response" ]]; then
