@@ -183,7 +183,6 @@ readonly gui_pkgs=(
   libreoffice-fresh
   meld
   network-manager-applet
-  pulseaudio
   scribus
   strawberry
   ttf-0xproto-nerd
@@ -1157,7 +1156,7 @@ install_gpu_drivers() {
             ;;
         AMD)
             log_info "Installing AMD drivers..."
-            arch-chroot "$root_mount" pacman -S --noconfirm mesa xf86-video-amdgpu amdgpu_top
+            arch-chroot "$root_mount" pacman -S --noconfirm mesa xf86-video-amdgpu amdgpu_top amdsmi
             ;;
         Intel)
             log_info "Installing Intel drivers..."
