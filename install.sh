@@ -108,6 +108,7 @@ readonly pacstrap_pkgs=(
   e2fsprogs
   edk2-ovmf
   efibootmgr
+  ethtool
   eza
   fastfetch
   firewalld
