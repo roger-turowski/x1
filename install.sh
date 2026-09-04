@@ -1471,9 +1471,6 @@ main() {
 
   arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
-  # Create a directory for AppImages
-  arch-chroot $my_root_mount mkdir /home/$my_user_id/AppImages/
-  
   # Copy this script to the root home directory
   cp install.sh $my_root_mount/root/Scripts
   chmod -x $my_root_mount/root/Scripts/install.sh
