@@ -1022,47 +1022,6 @@ configure_time_and_locale() {
     log_info "Time and locale configuration complete"
 CHROOT_EOF
 }
-apply_nic_quirks() {
-  # Detect physical NICs by PCI vendor:device ID and write persistent fixes
-  # into the target. Bus addresses and interface names may vary between boots,
-  # VID:DID and driver identity do not.
-  local root_mount="$1"
-
-  local sys iface vid did driver
-  for sys in /sys/class/net/*; do
-    [[ -e "$sys/device" ]] || continue                # skips lo, bridges, vnets
-    iface=${sys##*/}
-    vid=$(<"$sys/device/vendor")
-    did=$(<"$sys/device/device")
-    driver=$(basename "$(readlink -f "$sys/device/driver")" 2>/dev/null || true)
-
-    case "${vid}:${did}:${driver}" in
-      # RTL8125/8126/8127 — handled by r8169. Match the whole family
-      # so a slightly different SKU doesn't slip through.
-      0x10ec:0x8125:r8169|0x10ec:0x8126:r8169|0x10ec:0x8127:r8169)
-        log_info "Realtek RTL812x found ($iface, $driver)"
-        mkdir -p "${root_mount}/etc/modprobe.d"
-        printf 'options r8169 eee_enable=0\n' \
-          > "${root_mount}/etc/modprobe.d/r8169-eee.conf"
-        ;;
-
-      # Aquantia/Marvell AQC113 — driven by atlantic
-      0x1d6a:*:atlantic)
-        log_info "AQC113 found ($iface, $driver)"
-        # Append to the existing cmdline, preserving whatever is already there
-        arch-chroot "$root_mount" sed -i \
-          's/^GRUB_CMDLINE_LINUX_DEFAULT="\([^"]*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 pcie_aspm=off"/' \
-          /etc/default/grub
-        ;;
-    esac
-  done
-
-  # Idempotence guard: repeated devices shouldn't stack the GRUB arg
-  # (the loop above can hit both ports of a dual-NIC board)
-  if grep -q 'pcie_aspm=off pcie_aspm=off' "${root_mount}/etc/default/grub" 2>/dev/null; then
-    log_warn "pcie_aspm=off already present; duplicate application detected"
-  fi
-}
 enable_services() {
   local root_mount="$1"
   shift
@@ -1076,6 +1035,17 @@ enable_services() {
   done
 
   log_info "All specified services enabled successfully"
+}
+configure_nic_fixes() {
+  # Disable Energy-Efficient Ethernet globally at driver bind time.
+  # Interface name agnostic: $name is resolved by udev per event.
+  local root_mount="$1"
+
+  mkdir -p "${root_mount}/etc/udev/rules.d"
+  # shellcheck disable=SC2016  # $name is expanded by udev at event time, not by bash
+  printf '%s\n' \
+    'ACTION=="add", SUBSYSTEM=="net", KERNEL=="e*", RUN+="/usr/bin/ethtool --set-eee $name eee off"' \
+    > "${root_mount}/etc/udev/rules.d/70-eee-off.rules"
 }
 install_and_configure_grub() {
   # Install and configure GRUB for normal and LTS kernels
@@ -1454,8 +1424,8 @@ main() {
   # Enable color output for pacman and specify the number of parallel downloads
   arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
 
-  apply_nic_quirks "$my_root_mount"
-  
+  configure_nic_fixes "$my_root_mount"
+
   install_and_configure_grub "$my_root_mount"
 
   enable_services "$my_root_mount" "${services_to_enable[@]}"
