@@ -1479,15 +1479,11 @@ main() {
   chmod -x $my_root_mount/root/Scripts/install.sh
   cp "$LOG_FILE" $my_root_mount/root/
 
-  # (I want to retain the past results for debugging) clear
-
-  echo -e "${success_color}Please set a password for the new root account:${no_color}"
+    echo -e "${success_color}Please set a password for the new root account:${no_color}"
   arch-chroot $my_root_mount passwd root
 
   sync
   
-  # (Does not work) umount $my_root_mount || log_error "Failed to unmount root mount point $my_root_mount"
-
   swapoff /dev/system/swap || log_error "Failed to disable swap on /dev"
 
   log_info "Script finished! Please reboot."
