@@ -1113,25 +1113,57 @@ update_mkinitcpio() {
   log_info "mkinitcpio configuration updated successfully"
 }
 detect_gpu() {
-    local vendor_id
-    local device
+  # Commented out to test new code at the end. Nvidia was not detected on Proxmox VM.
+  # Detect GPU
+  #     # Detect GPU
+  #     local vendor_id
+  #     local device
+  #
+  #     for device in /sys/bus/pci/devices/*/; do
+  #         local class
+  #         class=$(cat "${device}
+  #     local vendor_id
+  #     local device
+  #
+  #     for device in /sys/bus/pci/devices/*/; do
+  #         local class
+  #         class=$(cat "${device}class" 2>/dev/null)
+  #         # 0x030000 = VGA, 0x030200 = 3D controller, 0x038000 = display
+  #         if [[ "$class" == "0x030000" ]] || [[ "$class" == "0x030200" ]] || [[ "$class" == "0x038000" ]]; then
+  #             vendor_id=$(cat "${device}vendor" 2>/dev/null | cut -c3-6)
+  #             break
+  #         fi
+  #     done
+  #
+  #     case "$vendor_id" in
+  #         10de) log_info "GPU detected: NVIDIA"; printf '%s\n' "NVIDIA" ;;
+  #         1002) log_info "GPU detected: AMD";    printf '%s\n' "AMD" ;;
+  #         8086) log_info "GPU detected: Intel";  printf '%s\n' "Intel" ;;
+  #         *)    log_info "GPU detected: Unknown (vendor: ${vendor_id:-none})"; printf '%s\n' "Unknown" ;;
+  #     esac
+  for device in /sys/bus/pci/devices/*/; do
+    local class
+    class=$(cat "${device}class" 2>/dev/null)
+    # 0x030000 = VGA, 0x030200 = 3D controller, 0x038000 = display
+    if [[ "$class" == "0x030000" || "$class" == "0x030200" || "$class" == "0x038000" ]]; then
+      local vid
+      vid=$(cat "${device}vendor" 2>/dev/null | cut -c3-6)
+      # 1234 = QEMU/Bochs emulated VGA (virt-manager/Proxmox virtual display)
+      # 1af4 = Red Hat/VirtIO (virtio-gpu) — also virtual
+      if [[ "$vid" == "1234" || "$vid" == "1af4" ]]; then
+        continue   # virtual adapter, keep scanning
+      fi
+      vendor_id="$vid"
+      break         # first *physical* display-class device
+    fi
+  done
 
-    for device in /sys/bus/pci/devices/*/; do
-        local class
-        class=$(cat "${device}class" 2>/dev/null)
-        # 0x030000 = VGA, 0x030200 = 3D controller, 0x038000 = display
-        if [[ "$class" == "0x030000" ]] || [[ "$class" == "0x030200" ]] || [[ "$class" == "0x038000" ]]; then
-            vendor_id=$(cat "${device}vendor" 2>/dev/null | cut -c3-6)
-            break
-        fi
-    done
-
-    case "$vendor_id" in
-        10de) log_info "GPU detected: NVIDIA"; printf '%s\n' "NVIDIA" ;;
-        1002) log_info "GPU detected: AMD";    printf '%s\n' "AMD" ;;
-        8086) log_info "GPU detected: Intel";  printf '%s\n' "Intel" ;;
-        *)    log_info "GPU detected: Unknown (vendor: ${vendor_id:-none})"; printf '%s\n' "Unknown" ;;
-    esac
+  case "$vendor_id" in
+    10de) log_info "GPU detected: NVIDIA"; printf '%s\n' "NVIDIA" ;;
+    1002) log_info "GPU detected: AMD";    printf '%s\n' "AMD" ;;
+    8086) log_info "GPU detected: Intel";  printf '%s\n' "Intel" ;;
+    *)    log_info "GPU detected: Unknown (vendor: ${vendor_id:-none})"; printf '%s\n' "Unknown" ;;
+  esac
 }
 install_gpu_drivers() {
     local root_mount="$1"
@@ -1171,6 +1203,21 @@ install_gpu_drivers() {
     arch-chroot "$root_mount" mkinitcpio -P
     
     log_info "Driver installation complete. Reboot required."
+}
+configure_grub_nvidia() {
+    local grub_cfg="/etc/default/grub"
+    local target_params="nvidia-drm.modeset=1"
+    
+    # Check if parameter already exists to avoid duplicates
+    if ! grep -q "$target_params" "$grub_cfg"; then
+        sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"\(.*\)\"/GRUB_CMDLINE_LINUX_DEFAULT=\"\1 $target_params\"/" "$grub_cfg"
+        echo "Added kernel parameters for NVIDIA."
+        
+        # Regenerate GRUB config
+        grub-mkconfig -o /boot/grub/grub.cfg
+    else
+        echo "NVIDIA kernel parameters already present."
+    fi
 }
 create_post_install_scripts_for_root() {
   # Create post install scripts for root
