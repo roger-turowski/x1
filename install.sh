@@ -235,6 +235,13 @@ readonly flatpak_apps=(
   io.github.nokse22.inspector
   dev.bragefuglseth.Fretboard
 )
+readonly aur_apps=(
+  brave-bin
+  btrfs-assistant
+  oh-my-posh
+  plymouth
+  ttf-ms-fonts
+)
 #endregion - Variables
 # =============================================================================
 # region - Function Definitions
@@ -970,34 +977,11 @@ create_btrfs_subvolumes() {
   mount /dev/system/root "${root_mount}" || \
     log_error "Failed to mount root logical volume /dev/system/root to $root_mount"
 
-  # 1. Create the root @ subvolume
+  # Create the root @ subvolume
   btrfs subvolume create "$root_mount/@" || \
     log_error "Failed to create @ subvolume"
 
-  # 2. Create parent directories for nested subvolumes
-  # We only create the PARENTS, not the target subvolume directories themselves.
-  # btrfs subvolume create requires the parent directory to exist.
-  mkdir "$root_mount/.snapshots" || \
-    log_error "Failed to create .snapshots directory in $root_mount"
-  mkdir -p "$root_mount/boot/grub2/i386-pc" || \
-    log_error "Failed to create boot/grub2/i386-pc directory in $root_mount"
-  mkdir -p "$root_mount/boot/grub2/x86_64-efi" || \
-    log_error "Failed to create boot/grub2/x86_64-efi directory in $root_mount"
-  mkdir "$root_mount/opt" || \
-    log_error "Failed to create opt directory in $root_mount"
-  mkdir "$root_mount/root" || \
-    log_error "Failed to create root directory in $root_mount"
-  mkdir "$root_mount/srv" || \
-    log_error "Failed to create srv directory in $root_mount"
-  mkdir "$root_mount/tmp" || \
-    log_error "Failed to create tmp directory in $root_mount"
-  mkdir -p "$root_mount/usr/local" || \
-    log_error "Failed to create usr/local directory in $root_mount"
-  mkdir "$root_mount/var" || \
-    log_error "Failed to create var directory in $root_mount"
-
-  # 3. Create the subvolumes
-  # Note: The parent directories now exist, so these will succeed.
+  # Create the subvolumes
   btrfs subvolume create "$root_mount/@/.snapshots"
   btrfs subvolume create -p "$root_mount/@/boot/grub2/i386-pc"
   btrfs subvolume create -p "$root_mount/@/boot/grub2/x86_64-efi"
@@ -1263,7 +1247,7 @@ detect_gpu() {
   local class
   local vid
   local vendor_id
-  
+
   for device in /sys/bus/pci/devices/*/; do
     class=$(cat "${device}class" 2>/dev/null)
     # 0x030000 = VGA, 0x030200 = 3D controller, 0x038000 = display
@@ -1340,34 +1324,31 @@ configure_grub_nvidia() {
         echo "NVIDIA kernel parameters already present."
     fi
 }
-create_post_install_scripts_for_root() {
-  # Create post install scripts for root
-  local root_mount="$1"
-
-  mkdir "${root_mount}/root/Scripts"
-  # arch-chroot "${root_mount}" touch /root/Scripts/enable_snapper_snapshots.sh
-  # arch-chroot "${root_mount}" chmod +x /root/Scripts/enable_snapper_snapshots.sh
-  # { echo -e '#!/usr/bin/env bash';
-  #   echo -e 'btrfs subvolume delete /.snapshots/';
-  #   echo -e 'snapper -c root create-config /';
-  #   echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
-  #   echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
-  #   echo -e 'snapper list-configs';
-  # } >> "${root_mount}/root/Scripts/enable_snapper_snapshots.sh"
-}
 create_post_install_scripts_for_user() {
   local root_mount="$1"
   local user_id="$2"
-  arch-chroot "${root_mount}" mkdir "/home/${user_id}/Scripts/"
-  arch-chroot "${root_mount}" touch "/home/${user_id}/Scripts/enable_yay.sh"
-  arch-chroot "${root_mount}" chmod +x "/home/${user_id}/Scripts/enable_yay.sh"
-  { echo -e '#!/usr/bin/bash';
-    echo -e 'git clone https://aur.archlinux.org/yay.git';
-    echo -e 'pushd yay';
-    echo -e 'makepkg -si';
-    echo -e 'popd';
-    echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
-  } >> "${root_mount}/home/${user_id}/Scripts/enable_yay.sh"
+  local script_path="${root_mount}/home/${user_id}/Scripts/enable_yay.sh"
+
+  mkdir -p "${root_mount}/home/${user_id}/Scripts/" || \
+    log_error "Failed to create the user Scripts directory"
+  
+  { 
+    echo '#!/usr/bin/env bash'
+    echo 'set -euo pipefail'
+    echo 'mkdir -p ~/Git'
+    echo 'git clone https://aur.archlinux.org/yay.git ~/Git'
+    echo 'pushd ~/Git/yay'
+    echo 'makepkg -si'
+    echo 'popd'
+    local app
+    for app in "${aur_apps[@]}"; do
+      printf 'yay --noconfirm -S %q\n' "$app"
+    done
+  } > "$script_path" || \
+    log_error "Failed to create $script_path"
+
+  chmod +x "$script_path" || \
+    log_error "Failed to make $script_path script executable"
 }
 create_script_to_install_flatpack_apps() {
   local root_mount="$1"
@@ -1381,9 +1362,11 @@ create_script_to_install_flatpack_apps() {
     for app in "${flatpak_apps[@]}"; do
       printf 'flatpak install -y --noninteractive flathub %q\n' "$app"
     done
-  } > "$script_path"
+  } > "$script_path" || \
+    log_error "Failed to create $script_path"
 
-  chmod +x "$script_path"
+  chmod +x "$script_path" || \
+    log_error "Failed to make $script_path script executable"
 }
 configure_grub_for_snapshot_recovery() {
   local root_mount="$1"
@@ -1471,13 +1454,13 @@ main() {
   #root_partition_size=$(get_root_partition_size "$my_disk")
 
   # install_gui_apps=$(ask_install_de_native)
-  ask_install_de_native
-  install_gui_apps=$?
+  install_gui_apps=0
+  ask_install_de_native || install_gui_apps=1
   log_info "install_gui_apps is ${install_gui_apps}"
   
   # install_podman_pkgs=$(ask_install_podman_pkgs)
-  ask_install_podman_pkgs
-  install_podman_pkgs=$?
+  install_podman_pkgs=0
+  ask_install_podman_pkgs || install_podman_pkgs=1
   log_info "install_podman_pkgs is ${install_podman_pkgs}"
   
   if ! install_disk=$(get_install_disk); then
@@ -1606,12 +1589,12 @@ main() {
   # Install snapper
   arch-chroot $my_root_mount pacman -S --needed --noconfirm --quiet snapper snap-pac inotify-tools
 
+  configure_snapper_in_chroot "${my_root_mount}"
+
   configure_grub_for_snapshot_recovery "${my_root_mount}"
 
   # Allow root to have ssh access initially for troubleshooting while developing
   arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-
-  configure_snapper_in_chroot "${my_root_mount}"
 
   create_post_install_scripts_for_root "${my_root_mount}"
 
@@ -1628,6 +1611,7 @@ main() {
   arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
   # Copy this script to the root home directory
+  mkdir "${root_mount}/root/Scripts"
   cp install.sh $my_root_mount/root/Scripts
   chmod -x $my_root_mount/root/Scripts/install.sh
   cp "$LOG_FILE" $my_root_mount/root/
@@ -1637,8 +1621,6 @@ main() {
 
   sync
   
-  swapoff /dev/system/swap || log_error "Failed to disable swap on /dev"
-
   log_info "Script finished! Please reboot."
 }
 # endregion - Main Script Execution
