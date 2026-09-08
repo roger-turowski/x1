@@ -2,11 +2,18 @@
 
 detect_gpu() {
     # Get PCI IDs. -nn shows numeric IDs. -k shows kernel driver in use.
-    local pci_info=$(lspci -nn -k | grep -A 3 -E 'VGA|3D')
-    
+    local pci_info
+    pci_info=$(lspci -nn -k | grep -A 3 -E 'VGA|3D')
+
     # Extract Vendor ID (first 4 chars after [)
     # Example: [10de:1b80] -> 10de
-    local vendor_id=$(echo "$pci_info" | grep -oP '\[\K[0-9a-f]{4}' | head -1)
+    local vendor_id
+    vendor_id=$(echo "$pci_info" | grep -oP '\[\K[0-9a-f]{4}(?=:[0-9a-f]{4}\])' | head -1)
+
+
+    if [[ -z "$vendor_id" ]]; then
+        log_error "No display controller found via lspci"
+    fi
 
     case "$vendor_id" in
         10de)

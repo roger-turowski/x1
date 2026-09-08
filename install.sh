@@ -1260,12 +1260,14 @@ detect_gpu() {
   #         8086) log_info "GPU detected: Intel";  printf '%s\n' "Intel" ;;
   #         *)    log_info "GPU detected: Unknown (vendor: ${vendor_id:-none})"; printf '%s\n' "Unknown" ;;
   #     esac
+  local class
+  local vid
+  local vendor_id
+  
   for device in /sys/bus/pci/devices/*/; do
-    local class
     class=$(cat "${device}class" 2>/dev/null)
     # 0x030000 = VGA, 0x030200 = 3D controller, 0x038000 = display
     if [[ "$class" == "0x030000" || "$class" == "0x030200" || "$class" == "0x038000" ]]; then
-      local vid
       vid=$(cat "${device}vendor" 2>/dev/null | cut -c3-6)
       # 1234 = QEMU/Bochs emulated VGA (virt-manager/Proxmox virtual display)
       # 1af4 = Red Hat/VirtIO (virtio-gpu) — also virtual
@@ -1451,8 +1453,8 @@ main() {
   local -r my_shell="/usr/bin/bash"
   local -r host_domain="vienna.ad"
   local -r efi_partition_size="550M"
-  # local root_partition_size="0" # Use all remaining space for root
   readonly keyboard_layout="us"
+  # local root_partition_size="0" # Use all remaining space for root
   #readonly disk_size_root=128G
   # readonly disk_pct_of_free_root=40
   #readonly disk_size_swap=4G
