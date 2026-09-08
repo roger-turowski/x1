@@ -1335,8 +1335,8 @@ create_post_install_scripts_for_user() {
   { 
     echo '#!/usr/bin/env bash'
     echo 'set -euo pipefail'
-    echo 'mkdir -p ~/Git'
-    echo 'git clone https://aur.archlinux.org/yay.git ~/Git'
+    echo 'mkdir -p ~/Git/yay'
+    echo 'git clone https://aur.archlinux.org/yay.git ~/Git/yay'
     echo 'pushd ~/Git/yay'
     echo 'makepkg -si'
     echo 'popd'
@@ -1506,7 +1506,7 @@ main() {
   dmsetup remove_all
 
   # Stop RAID arrays (if any)
-  mdadm --stop --scan
+  command -v mdadm >/dev/null && mdadm --stop --scan
 
   # Prepare the disk for installation
   # create_physical_partitions "$my_disk" "$efi_partition_size" "$root_partition_size"
@@ -1576,7 +1576,7 @@ main() {
     arch-chroot $my_root_mount systemctl enable sddm
 
     # Apply the Breeze theme to sddm
-    mkdir $my_root_mount/etc/sddm.conf.d/
+    mkdir -p $my_root_mount/etc/sddm.conf.d/
     arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
     # Install the gui packages
@@ -1596,8 +1596,6 @@ main() {
   # Allow root to have ssh access initially for troubleshooting while developing
   arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
-  create_post_install_scripts_for_root "${my_root_mount}"
-
   create_post_install_scripts_for_user "${my_root_mount}" "${my_user_id}"
 
   # endregion - completed function calls
@@ -1611,7 +1609,7 @@ main() {
   arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
   # Copy this script to the root home directory
-  mkdir "${root_mount}/root/Scripts"
+  mkdir -p "${my_root_mount}/root/Scripts"
   cp install.sh $my_root_mount/root/Scripts
   chmod -x $my_root_mount/root/Scripts/install.sh
   cp "$LOG_FILE" $my_root_mount/root/
