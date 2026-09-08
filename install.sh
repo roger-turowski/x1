@@ -40,7 +40,7 @@
 # Set-up Wi-Fi connection example:
   # iwctl adapter list
   # iwctl station wlan0 get-networks
-  # iwbtl station wlan0 connect <network_name>
+  # iwctl station wlan0 connect <network_name>
   # ip a
   # ping -c 4 archlinux.org
 
@@ -217,6 +217,23 @@ readonly services_to_enable=(
   fstrim.timer
   firewalld
   acpid
+)
+readonly flatpak_apps=(
+  dev.bragefuglseth.Keypunch
+  net.cozic.joplin_desktop
+  org.deluge_torrent.deluge
+  com.github.sixpounder.GameOfLife
+  io.github.giantpinkrobots.flatsweep
+  io.github.shiftey.Desktop
+  com.sweethome3d.Sweethome3d
+  org.kicad.KiCad
+  com.obsproject.Studio
+  com.github.artemanufrij.regextester
+  org.remmina.Remmina
+  org.stellarium.Stellarium
+  com.adrienplazas.Metronome
+  io.github.nokse22.inspector
+  dev.bragefuglseth.Fretboard
 )
 #endregion - Variables
 # =============================================================================
@@ -1350,29 +1367,21 @@ create_post_install_scripts_for_user() {
     echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
   } >> "${root_mount}/home/${user_id}/Scripts/enable_yay.sh"
 }
-create_script_to_install_flatpack_apps(){
+create_script_to_install_flatpack_apps() {
   local root_mount="$1"
   local user_id="$2"
+  local script_path="${root_mount}/home/${user_id}/Scripts/install_flatpak_apps.sh"
 
-    # Create script to install FlatPack apps
-  arch-chroot "${root_mount}" touch "/home/${user_id}/Scripts/install_flatpak_apps.sh"
-  arch-chroot "${root_mount}" chmod +x "/home/${user_id}/Scripts/install_flatpak_apps.sh"
-  { echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Keypunch
-    echo -e flatpak install -y --noninteractive flathub net.cozic.joplin_desktop
-    echo -e flatpak install -y --noninteractive flathub org.deluge_torrent.deluge
-    echo -e flatpak install -y --noninteractive flathub com.github.sixpounder.GameOfLife
-    echo -e flatpak install -y --noninteractive flathub io.github.giantpinkrobots.flatsweep
-    echo -e flatpak install -y --noninteractive flathub io.github.shiftey.Desktop
-    echo -e flatpak install -y --noninteractive flathub com.sweethome3d.Sweethome3d
-    echo -e flatpak install -y --noninteractive flathub org.kicad.KiCad
-    echo -e flatpak install -y --noninteractive flathub com.obsproject.Studio
-    echo -e flatpak install -y --noninteractive flathub com.github.artemanufrij.regextester
-    echo -e flatpak install -y --noninteractive flathub org.remmina.Remmina
-    echo -e flatpak install -y --noninteractive flathub org.stellarium.Stellarium
-    echo -e flatpak install -y --noninteractive flathub com.adrienplazas.Metronome
-    echo -e flatpak install -y --noninteractive flathub io.github.nokse22.inspector
-    echo -e flatpak install -y --noninteractive flathub dev.bragefuglseth.Fretboard
-  } >> "${root_mount}/home/${user_id}/Scripts/install_flatpak_apps.sh"
+  {
+    echo '#!/usr/bin/env bash'
+    echo 'set -euo pipefail'
+    local app
+    for app in "${flatpak_apps[@]}"; do
+      printf 'flatpak install -y --noninteractive flathub %q\n' "$app"
+    done
+  } > "$script_path"
+
+  chmod +x "$script_path"
 }
 configure_grub_for_snapshot_recovery() {
   local root_mount="$1"
