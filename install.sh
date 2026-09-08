@@ -1297,7 +1297,7 @@ install_gpu_drivers() {
             arch-chroot "$root_mount" pacman -S --noconfirm mesa lib32-mesa intel-media-driver intel-ucode
             ;;
         *)
-            log_warning "Unknown GPU detected. Manual intervention may be required."
+            log_warn "Unknown GPU detected. Manual intervention may be required."
             ;;
     esac
     
