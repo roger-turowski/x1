@@ -1031,9 +1031,9 @@ mount_partitions() {
 
   log_info "Mounting partitions to $root_mount"
 
-  # Mount the root logical volume with BTRFS subvolume options
-  mount -o subvol=@,$MOUNTOPTS /dev/system/root "$root_mount" || \
-    log_error "Failed to mount root logical volume /dev/system/root to $root_mount"
+  # Mount the root logical volume with BTRFS subvolume options (Probably don't need this, may duplicate mount on fstab)
+  # mount -o subvol=@,$MOUNTOPTS /dev/system/root "$root_mount" || \
+  #  log_error "Failed to mount root logical volume /dev/system/root to $root_mount"
 
   # Mount the EFI partition
   mkdir -p "$root_mount/boot/efi"
