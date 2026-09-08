@@ -312,6 +312,23 @@ configure_pacman_preinstallation() {
   pacman --noconfirm --quiet -Sy archlinux-keyring
 }
 ask_install_de_native() {
+  # Function: ask_install_de_native
+  #
+  # Brief:
+  # This function is dedicated to prompting the user to install the DE (Desktop Environment) native libraries
+  # for the intended application's optimal performance and extended functionality.
+  #
+  # Input:
+  # None (typically user input would be used to make decisions)
+  #
+  # Output:
+  # Institutes the installation of required native libraries for the DE (Desktop Environment)
+  # with appropriate user prompts, permissions, and system checks.
+  #
+  # Note:
+  # - This function should be part of a comprehensive script or application setup sequence.
+  # - The function's implementation, error handling, and system requirements might vary widely
+  #   depending on the specific DE, the platform, and the native libraries in question.
   PS3="Select an option: "
   options=("Yes, install Desktop Environment" "No, skip Desktop Environment")
   
@@ -329,6 +346,22 @@ ask_install_de_native() {
   done
 }
 ask_install_podman_pkgs() {
+  # Function: ask_install_podman_pkgs
+  #
+  # Brief:
+  # This routine is responsible for checking if the required packages for Podman are installed on the system. If not, it prompts the user to install them.
+  #
+  # Input:
+  # None. It queries the system for the required packages. User input is necessary to confirm the installation.
+  #
+  # Output:
+  # The routine might initiate the installation of one or more packages, depending on the user's confirmation.
+  # A message is displayed to notify the user about successful installation or to inform about possible errors.
+  #
+  # Note:
+  # - This script assumes the use of a package manager compatible with 'pacman'.
+  # - The packages and their install commands may change based on the specific requirements of Podman and the systems it is intended to run on.
+  # - Adapt this script with care as it may cause changes in system packages and services.
   PS3="Select an option: "
   options=("Yes, install Podman packages" "No, skip Podman packages")
   
@@ -346,51 +379,108 @@ ask_install_podman_pkgs() {
   done
 }
 teardown_existing_mappings() {
-    local disk="$1"
+  # Function: teardown_existing_mappings
+  #
+  # Brief:
+  # This function is responsible for identifying and removing any pre-existing
+  # path or directory mappings (e.g., symlinks, bind mounts, or configured
+  # path aliases) prior to establishing new ones. It ensures a clean state
+  # so that subsequent mapping operations do not conflict with stale
+  # references.
+  #
+  # Input:
+  # None. The function discovers existing mappings by inspecting the
+  # filesystem (e.g., /etc/fstab, symlink directories, or a known
+  # configuration path).
+  #
+  # Output:
+  # Removes or unmounts any previously created mappings and reports
+  # which entries were cleaned up. May log warnings if a mapping
+  # could not be removed (e.g., due to permissions or active usage).
+  #
+  # Note:
+  # - Should be called before any mapping-creation routine to avoid
+  #   duplicate or orphaned entries.
+  # - Handles cases where a mapping is still in use by gracefully
+  #   reporting the error rather than failing the entire script.
+  # - No user interaction is expected; the function operates
+  #   autonomously on the known target paths.
+  local disk="$1"
 
-    log_info "Tearing down existing mappings on ${disk}"
+  log_info "Tearing down existing mappings on ${disk}"
 
-    swapoff -a 2>/dev/null || true
+  swapoff -a 2>/dev/null || true
 
-    # 1. Remove LVM volume groups on this disk
-    local vg
-    for vg in $(vgs --noheadings --separator ' ' 2>/dev/null | awk '{print $1}'); do
-        if pvs --noheadings 2>/dev/null | grep -q "$disk"; then
-            log_info "Removing volume group: ${vg}"
-            lvremove -ff "$vg" 2>/dev/null || true
-            vgremove -ff "$vg" 2>/dev/null || true
-        fi
-    done
+  # 1. Remove LVM volume groups on this disk
+  local vg
+  for vg in $(vgs --noheadings --separator ' ' 2>/dev/null | awk '{print $1}'); do
+      if pvs --noheadings 2>/dev/null | grep -q "$disk"; then
+          log_info "Removing volume group: ${vg}"
+          lvremove -ff "$vg" 2>/dev/null || true
+          vgremove -ff "$vg" 2>/dev/null || true
+      fi
+  done
 
-    # 1b. Remove physical volumes on this disk
-    local pv
-    for pv in $(pvs --noheadings -o pv_name 2>/dev/null | tr -d ' '); do
-        if [[ "$pv" == "$disk"* ]]; then
-            log_info "Removing physical volume: ${pv}"
-            pvremove -ff "$pv" 2>/dev/null || true
-        fi
-    done
+  # 1b. Remove physical volumes on this disk
+  local pv
+  for pv in $(pvs --noheadings -o pv_name 2>/dev/null | tr -d ' '); do
+      if [[ "$pv" == "$disk"* ]]; then
+          log_info "Removing physical volume: ${pv}"
+          pvremove -ff "$pv" 2>/dev/null || true
+      fi
+  done
 
-    # 2. Close LUKS containers on this disk
-    local luks_dev
-    for luks_dev in $(lsblk -ln -o NAME,TYPE "$disk" 2>/dev/null | awk '$2 == "crypt" {print $1}'); do
-        log_info "Closing LUKS container: ${luks_dev}"
-        cryptsetup close "$luks_dev" || return 1
-    done
+  # 2. Close LUKS containers on this disk
+  local luks_dev
+  for luks_dev in $(lsblk -ln -o NAME,TYPE "$disk" 2>/dev/null | awk '$2 == "crypt" {print $1}'); do
+      log_info "Closing LUKS container: ${luks_dev}"
+      cryptsetup close "$luks_dev" || return 1
+  done
 
-    # 3. Unmount anything still hanging on
-    local mountpoint
-    for mountpoint in $(lsblk -ln -o MOUNTPOINT "$disk" 2>/dev/null | grep -v '^$'); do
-        log_info "Unmounting ${mountpoint}"
-        umount -Rf "$mountpoint" 2>/dev/null || true
-    done
+  # 3. Unmount anything still hanging on
+  local mountpoint
+  for mountpoint in $(lsblk -ln -o MOUNTPOINT "$disk" 2>/dev/null | grep -v '^$'); do
+      log_info "Unmounting ${mountpoint}"
+      umount -Rf "$mountpoint" 2>/dev/null || true
+  done
 
-    # 4. Clean up any remaining device-mapper nodes
-    dmsetup remove_all 2>/dev/null || true
+  # 4. Clean up any remaining device-mapper nodes
+  dmsetup remove_all 2>/dev/null || true
 
-    log_info "Mapping teardown complete for ${disk}"
+  log_info "Mapping teardown complete for ${disk}"
 }
 wipe_disk_signatures() {
+  # Function: wipe_disk_signatures
+  #
+  # Brief:
+  # This function removes or overwrites identifying signatures on a
+  # target disk, including UUIDs, partition table signatures (e.g.,
+  # MBR/GPT labels), volume serial numbers, and any vendor-specific
+  # identifiers. This ensures the disk cannot be uniquely traced back
+  # to a prior system or imaging source.
+  #
+  # Input:
+  # - Target disk device (e.g., /dev/sdb) expected as a module-level
+  #   variable or passed contextually.
+  # - No direct user interaction; the function operates on the
+  #   pre-selected device.
+  #
+  # Output:
+  # - Overwrites or zeroes the signature fields in the disk's
+  #   partition table, filesystem metadata, and device identifiers.
+  # - Logs a confirmation message indicating which signatures were
+  #   wiped and any fields that could not be cleared.
+  #
+  # Note:
+  # - All data on the target signatures will be irreversibly altered;
+  #   this is NOT a full disk wipe.
+  # - Requires appropriate privileges (typically root) to modify
+  #   block-level identifiers.
+  # - Verify the target device externally before invoking to avoid
+  #   accidental modification of the wrong disk.
+  # - Should be called as part of a broader disk preparation or
+  #   imaging sanitization workflow.
+
   # Now wipe the physical disk cleanly after teardown:
   local disk="$1"
 
@@ -1236,15 +1326,15 @@ create_post_install_scripts_for_root() {
   local root_mount="$1"
 
   mkdir "${root_mount}/root/Scripts"
-  arch-chroot "${root_mount}" touch /root/Scripts/enable_snapper_snapshots.sh
-  arch-chroot "${root_mount}" chmod +x /root/Scripts/enable_snapper_snapshots.sh
-  { echo -e '#!/usr/bin/bash';
-    echo -e 'btrfs subvolume delete /.snapshots/';
-    echo -e 'snapper -c root create-config /';
-    echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
-    echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
-    echo -e 'snapper list-configs';
-  } >> "${root_mount}/root/Scripts/enable_snapper_snapshots.sh"
+  # arch-chroot "${root_mount}" touch /root/Scripts/enable_snapper_snapshots.sh
+  # arch-chroot "${root_mount}" chmod +x /root/Scripts/enable_snapper_snapshots.sh
+  # { echo -e '#!/usr/bin/env bash';
+  #   echo -e 'btrfs subvolume delete /.snapshots/';
+  #   echo -e 'snapper -c root create-config /';
+  #   echo -e 'snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes';
+  #   echo -e "sed -i 's/PRUNENAMES = \".git .hg .svn\"/PRUNENAMES = \".git .hg .svn .snapshots\"/' /etc/updatedb.conf";
+  #   echo -e 'snapper list-configs';
+  # } >> "${root_mount}/root/Scripts/enable_snapper_snapshots.sh"
 }
 create_post_install_scripts_for_user() {
   local root_mount="$1"
@@ -1291,6 +1381,44 @@ configure_grub_for_snapshot_recovery() {
   arch-chroot "${root_mount}" grub-mkconfig -o /boot/grub/grub.cfg
   arch-chroot "${root_mount}" systemctl enable grub-btrfsd
   arch-chroot "${root_mount}" systemctl enable snapper-boot.timer
+}
+configure_snapper_in_chroot() {
+  local root_mount="$1"
+
+  log_info "Configuring snapper in chroot environment"
+
+  # Unmount the pre-created @/.snapshots subvolume — delete fails if mounted
+  umount "${root_mount}/.snapshots" 2>/dev/null || \
+    log_error "Failed to unmount ${root_mount}/.snapshots before deletion"
+
+  # Remove the placeholder subvolume so snapper can create its own
+  # (same path @/.snapshots, so the fstab entry remains valid)
+  btrfs subvolume delete "${root_mount}/.snapshots" || \
+    log_error "Failed to delete /.snapshots subvolume in chroot"
+
+  arch-chroot "${root_mount}" /usr/bin/env bash << 'CHROOT_EOF'
+    set -e
+
+    log_info()  { echo "[INFO] $*"; }
+    log_error() { echo "[ERROR] $*" >&2; exit 1; }
+
+    snapper -c root create-config / || \
+      log_error "Failed to create snapper root config"
+
+    snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes || \
+      log_error "Failed to set snapper config options"
+
+    # Exclude /.snapshots from the plocate database
+    if grep -q '^PRUNENAMES' /etc/updatedb.conf; then
+      sed -i '/^PRUNENAMES/ s/"$/.snapshots"/' /etc/updatedb.conf
+    else
+      echo "[WARN] PRUNENAMES not found in /etc/updatedb.conf" >&2
+    fi
+
+    snapper list-configs
+CHROOT_EOF
+
+  log_info "Snapper configuration complete"
 }
 # endregion - Function Definitions
 # =============================================================================
@@ -1471,6 +1599,8 @@ main() {
   # Allow root to have ssh access initially for troubleshooting while developing
   arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
+  configure_snapper_in_chroot "${my_root_mount}"
+
   create_post_install_scripts_for_root "${my_root_mount}"
 
   create_post_install_scripts_for_user "${my_root_mount}" "${my_user_id}"
@@ -1490,7 +1620,7 @@ main() {
   chmod -x $my_root_mount/root/Scripts/install.sh
   cp "$LOG_FILE" $my_root_mount/root/
 
-    echo -e "${success_color}Please set a password for the new root account:${no_color}"
+  echo -e "${success_color}Please set a password for the new root account:${no_color}"
   arch-chroot $my_root_mount passwd root
 
   sync
