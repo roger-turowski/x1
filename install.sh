@@ -1335,7 +1335,6 @@ create_post_install_scripts_for_user() {
   { 
     echo '#!/usr/bin/env bash'
     echo 'set -euo pipefail'
-    echo 'mkdir -p ~/Git/yay'
     echo 'git clone https://aur.archlinux.org/yay.git ~/Git/yay'
     echo 'pushd ~/Git/yay'
     echo 'makepkg -si'
@@ -1347,6 +1346,17 @@ create_post_install_scripts_for_user() {
   } > "$script_path" || \
     log_error "Failed to create $script_path"
 
+  chmod +x "$script_path" || \
+    log_error "Failed to make $script_path script executable"
+
+  local script_path="${root_mount}/home/${user_id}/Scripts/snapshot_baseline.sh"
+  {
+    echo '#!/usr/bin/env bash'
+    echo 'set -euo pipefail'
+    echo 'sudo snapper -c root create --description "baseline"'
+  } > "$script_path" || \
+    log_error "Failed to create $script_path"
+  
   chmod +x "$script_path" || \
     log_error "Failed to make $script_path script executable"
 }
