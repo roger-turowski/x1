@@ -1348,7 +1348,7 @@ create_post_install_scripts_for_user() {
     echo -e 'makepkg -si';
     echo -e 'popd';
     echo -e 'yay --noconfirm -S brave-bin btrfs-assistant oh-my-posh plymouth ttf-ms-fonts';
-  } >> "${root_mount}/home/${user_id}/Scripts/enable_y"
+  } >> "${root_mount}/home/${user_id}/Scripts/enable_yay.sh"
 }
 create_script_to_install_flatpack_apps(){
   local root_mount="$1"
