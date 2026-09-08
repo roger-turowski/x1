@@ -681,7 +681,7 @@ get_partition_sizes() {
         continue
       fi
       local pct_bytes=$((total_bytes * pct / 100))
-      out_home="$((pct_bytes / 1024 / 1024 / 1024))GB"
+      out_data="$((pct_bytes / 1024 / 1024 / 1024))GB"
       break
     elif [[ "$response" =~ ^([0-9]+)(TB|GB)$ ]]; then
       local num="${BASH_REMATCH[1]}"
