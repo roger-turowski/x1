@@ -1434,7 +1434,8 @@ main() {
   local SWAP_SIZE=""
   local HOME_SIZE=""
   local DATA_SIZE=""
-  local PARTITION_SIZE=""local cpu_firmware=""
+  local PARTITION_SIZE=""
+  local cpu_firmware=""
   local hypervisor_pkgs=""
   local install_gui_apps
   local install_podman_pkgs
