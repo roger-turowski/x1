@@ -1386,43 +1386,48 @@ configure_grub_for_snapshot_recovery() {
   arch-chroot "${root_mount}" systemctl enable grub-btrfsd
   arch-chroot "${root_mount}" systemctl enable snapper-boot.timer
 }
-configure_snapper_in_chroot() {
+configure_snapper_first_boot() {
   local root_mount="$1"
 
-  log_info "Configuring snapper in chroot environment"
+  log_info "Creating snapper first-boot configuration unit"
 
-  # Unmount the pre-created @/.snapshots subvolume — delete fails if mounted
-  umount "${root_mount}/.snapshots" 2>/dev/null || \
-    log_error "Failed to unmount ${root_mount}/.snapshots before deletion"
+  # Helper executed on the real system at first boot, where D-Bus exists
+  cat > "${root_mount}/usr/local/sbin/snapper-initial-setup.sh" <<'SETUP_EOF'
+#!/usr/bin/env bash
+set -euo pipefail
 
-  # Remove the placeholder subvolume so snapper can create its own
-  # (same path @/.snapshots, so the fstab entry remains valid)
-  btrfs subvolume delete "${root_mount}/.snapshots" || \
-    log_error "Failed to delete /.snapshots subvolume in chroot"
+umount /.snapshots
+btrfs subvolume delete /.snapshots
+snapper -c root create-config /
+snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes
+sed -i '/^PRUNENAMES/ s/"$/.snapshots"/' /etc/updatedb.conf
+mount /.snapshots
+SETUP_EOF
 
-  arch-chroot "${root_mount}" /usr/bin/env bash << 'CHROOT_EOF'
-    set -e
+  chmod 755 "${root_mount}/usr/local/sbin/snapper-initial-setup.sh" || \
+    log_error "Failed to make snapper-initial-setup.sh executable"
 
-    log_info()  { echo "[INFO] $*"; }
-    log_error() { echo "[ERROR] $*" >&2; exit 1; }
+  # Oneshot unit, self-disabling once the snapper config exists
+  cat > "${root_mount}/etc/systemd/system/snapper-initial-setup.service" <<'UNIT_EOF'
+[Unit]
+Description=Initial snapper root configuration
+ConditionPathExists=!/etc/snapper/configs/root
+After=local-fs.target
 
-    snapper -c root create-config / || \
-      log_error "Failed to create snapper root config"
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/snapper-initial-setup.sh
+RemainAfterExit=yes
 
-    snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes || \
-      log_error "Failed to set snapper config options"
+[Install]
+WantedBy=multi-user.target
+UNIT_EOF
 
-    # Exclude /.snapshots from the plocate database
-    if grep -q '^PRUNENAMES' /etc/updatedb.conf; then
-      sed -i '/^PRUNENAMES/ s/"$/.snapshots"/' /etc/updatedb.conf
-    else
-      echo "[WARN] PRUNENAMES not found in /etc/updatedb.conf" >&2
-    fi
+  # systemctl enable works in chroot — it only creates symlinks, no D-Bus needed
+  arch-chroot "${root_mount}" systemctl enable snapper-initial-setup.service || \
+    log_error "Failed to enable snapper-initial-setup.service"
 
-    snapper list-configs
-CHROOT_EOF
-
-  log_info "Snapper configuration complete"
+  log_info "Snapper first-boot unit created and enabled"
 }
 # endregion - Function Definitions
 # =============================================================================
@@ -1599,8 +1604,8 @@ main() {
   # Install snapper
   arch-chroot $my_root_mount pacman -S --needed --noconfirm --quiet snapper snap-pac inotify-tools
 
-  configure_snapper_in_chroot "${my_root_mount}"
-
+  configure_snapper_first_boot "${my_root_mount}"
+  
   configure_grub_for_snapshot_recovery "${my_root_mount}"
 
   # Allow root to have ssh access initially for troubleshooting while developing
@@ -1633,6 +1638,5 @@ main() {
 }
 # endregion - Main Script Execution
 # =============================================================================
-main "$@" || {
-  log_error "Installation failed. Please check the logs for details."
-}
+trap 'log_error "Installation failed near line ${LINENO}. Check ${LOG_FILE}."' ERR
+main "$@"
