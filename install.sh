@@ -1256,6 +1256,7 @@ detect_gpu() {
       # 1234 = QEMU/Bochs emulated VGA (virt-manager/Proxmox virtual display)
       # 1af4 = Red Hat/VirtIO (virtio-gpu) — also virtual
       if [[ "$vid" == "1234" || "$vid" == "1af4" ]]; then
+        vendor_id="$vid"
         continue   # virtual adapter, keep scanning
       fi
       vendor_id="$vid"
@@ -1627,7 +1628,7 @@ main() {
   chmod -x $my_root_mount/root/Scripts/install.sh
   cp "$LOG_FILE" $my_root_mount/root/
   
-  # Use the current mirrorlist in the final install, after /etc exists
+  # Use the current mirrorlist in the final install, after /etc
   cp "${pacman_mirrorlist}" "${my_root_mount}${pacman_mirrorlist}"
   
 
