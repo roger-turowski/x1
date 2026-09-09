@@ -911,9 +911,9 @@ create_logical_volumes() {
   
   # Check if enough space remains for the requested home size
   local free_pe
-  free_pe=$(vgs --noheadings --units n -o vg_free_count system 2>/dev/null | tr -dc '0-9')
+  free_pe=$(vgs --noheadings -o vg_free_count system) || \
+    log_error "Failed to query free extents in volume group system"
   local free_mb=$((free_pe * 4))
-
   log_info "Remaining free space in VG: ${free_mb}MiB"
 
   # Allocate home — use 100%FREE so no rounding mismatch
