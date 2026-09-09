@@ -1246,7 +1246,7 @@ detect_gpu() {
   #     esac
   local class
   local vid
-  local vendor_id
+  local vendor_id=""
 
   for device in /sys/bus/pci/devices/*/; do
     class=$(cat "${device}class" 2>/dev/null)
@@ -1574,9 +1574,6 @@ main() {
   # Add a user account
   arch-chroot $my_root_mount useradd -c "$my_full_name" -mG wheel -s $my_shell -p "$my_password_hash" $my_user_id
 
-  # Add my ID to the video group so I can view GPU performance counters
-  arch-chroot $my_root_mount usermod -aG video $my_user_id
-  
   if [ "$install_podman_pkgs" -eq 0 ]; then
     log_info "Installing Podman packages"
     arch-chroot $my_root_mount pacman -S --needed --noconfirm --quiet "${podman_pkgs[@]}"
@@ -1600,6 +1597,12 @@ main() {
     fi
   fi
   
+  # Add my ID to the video group so I can view GPU performance counters
+  arch-chroot $my_root_mount usermod -aG video $my_user_id
+  
+    # Add my ID to the wireshark group so I can view perform package captures
+  arch-chroot $my_root_mount usermod -aG wireshark $my_user_id
+
   # Install snapper
   arch-chroot $my_root_mount pacman -S --needed --noconfirm --quiet snapper snap-pac inotify-tools
 
