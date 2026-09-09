@@ -1544,8 +1544,6 @@ main() {
 
   mount_partitions "$my_root_mount" "$my_partition_efi"
 
-  cp "${pacman_mirrorlist}" "${my_root_mount}/${pacman_mirrorlist}"
-  
   local -a all_pkgs=("${pacstrap_pkgs[@]}")
   [[ -n "$cpu_firmware" ]] && all_pkgs+=("$cpu_firmware")
   [[ -n "$hypervisor_pkgs" ]] && all_pkgs+=("$hypervisor_pkgs")
@@ -1628,6 +1626,10 @@ main() {
   cp install.sh $my_root_mount/root/Scripts
   chmod -x $my_root_mount/root/Scripts/install.sh
   cp "$LOG_FILE" $my_root_mount/root/
+  
+  # Use the current mirrorlist in the final install, after /etc exists
+  cp "${pacman_mirrorlist}" "${my_root_mount}${pacman_mirrorlist}"
+  
 
   echo -e "${success_color}Please set a password for the new root account:${no_color}"
   arch-chroot $my_root_mount passwd root
