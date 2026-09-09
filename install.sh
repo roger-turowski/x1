@@ -204,6 +204,13 @@ readonly gui_pkgs=(
   vlc
   wireshark-qt
   xdg-user-dirs
+  sway                    # Sway Tiling Window Manager
+  foot                    # Default terminal for Sway
+  wofi                    # Program launcher for Sway
+  waybar                  # Menu Bar for Sway
+  mako                    # Notification app for Sway
+  xdg-desktop-portal-gtk  # Used for Sway
+  xdg-desktop-portal-wlr  # Used for Sway
 )
 readonly services_to_enable=(
   # Services to enable after installation
