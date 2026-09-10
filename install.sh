@@ -106,6 +106,7 @@ readonly pacstrap_pkgs=(
   dnsutils
   dosfstools
   e2fsprogs
+  exfatprogs
   edk2-ovmf
   efibootmgr
   ethtool
@@ -133,6 +134,7 @@ readonly pacstrap_pkgs=(
   nfs-utils
   nss-mdns
   ntfs-3g
+  ntfsprogs
   nmap
   nvim
   openbsd-netcat
@@ -154,6 +156,7 @@ readonly pacstrap_pkgs=(
   whois
   wpa_supplicant
   xdg-utils
+  xfsprogs
   zellij
   zsh
   zsh-completions
