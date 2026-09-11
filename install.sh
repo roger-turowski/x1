@@ -1523,9 +1523,6 @@ main() {
   # Configure keyboard
   localectl set-keymap ${keyboard_layout}
 
-  # Set-up the fastest Arch mirrors
-  reflector --age 6 --country us --latest 8 --number 5 --protocol https --sort rate --verbose --save "${pacman_mirrorlist}"
-
   wipe_disk_signatures "$my_disk"
 
   # Removes all active device mapper devices
