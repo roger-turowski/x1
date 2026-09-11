@@ -55,7 +55,6 @@ readonly VERBOSE="${VERBOSE:-false}"
 # User and locale
 readonly my_timezone="US/Michigan"
 readonly my_root_mount="/mnt"
-readonly my_host_name="arch"
 readonly my_user_id="roger"
 readonly my_full_name="Roger Turowski"
 # Colors for console output
@@ -1061,6 +1060,27 @@ mount_partitions() {
   mount /dev/system/data "$root_mount/data" || \
     log_error "Failed to mount data logical volume /dev/system/data to $root_mount/data"
 }
+get_hostname() {
+  local response
+  while true; do
+    read -r -p "Hostname for the new system [default: ${my_host_name}]: " response
+    response="${response:-${my_host_name}}"
+
+    # RFC 1123: letters/digits/hyphen, no leading/trailing hyphen, max 63 chars
+    if [[ ! "$response" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]; then
+      printf 'Invalid hostname: %s\nUse letters, digits and hyphens only.\n' "$response" >&2
+      continue
+    fi
+
+    read -r -p "Domain for /etc/hosts entry [default: ${host_domain}]: " response_domain
+    response_domain="${response_domain:-${host_domain}}"
+
+    break
+  done
+
+  log_info "Hostname selected: ${response}.${response_domain}"
+  printf '%s\n%s\n' "$response" "$response_domain"
+}
 configure_time_and_locale() {
   local root_mount="$1"
   local timezone="$2"
@@ -1460,9 +1480,10 @@ main() {
   local install_gui_apps
   local install_podman_pkgs
   local -r my_shell="/usr/bin/bash"
-  local -r host_domain="vienna.ad"
   local -r efi_partition_size="550M"
   readonly keyboard_layout="us"
+  local my_host_name_dyn=""
+  local host_domain_dyn=""
   # local root_partition_size="0" # Use all remaining space for root
   #readonly disk_size_root=128G
   # readonly disk_pct_of_free_root=40
@@ -1509,6 +1530,14 @@ main() {
   log_info "  Home LV: $HOME_SIZE"
   log_info "  Data LV: $DATA_SIZE"
   log_info "  Partition 2 (PV): $PARTITION_SIZE"
+
+  # Ask for and set the host name
+  {
+    read -r my_host_name_dyn
+    read -r host_domain_dyn
+  } < <(get_hostname)
+
+  log_info "  Hostname: ${my_host_name_dyn}.${host_domain_dyn}"
 
   read -rp "Proceed? [y/N]: " confirm
   case "$confirm" in
@@ -1563,7 +1592,7 @@ main() {
 
   install_gpu_drivers "$my_root_mount"
  
-  configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name" "$host_domain"
+  configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name_dyn" "$host_domain_dyn"
  
   # Enable color output for pacman and specify the number of parallel downloads
   arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
