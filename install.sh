@@ -1610,8 +1610,8 @@ main() {
   # Add my ID to the video group so I can view GPU performance counters
   arch-chroot $my_root_mount usermod -aG video $my_user_id
   
-    # Add my ID to the wireshark group so I can view perform package captures
-  arch-chroot $my_root_mount usermod -aG wireshark $my_user_id
+  # Add my ID to the wireshark group so I can view perform package captures
+  arch-chroot $my_root_mount getent group "wireshark" >/dev/null 2>&1 || usermod -aG wireshark $my_user_id
 
   # Install snapper
   arch-chroot $my_root_mount pacman -S --needed --noconfirm --quiet snapper snap-pac inotify-tools
