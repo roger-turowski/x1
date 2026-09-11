@@ -1082,7 +1082,8 @@ get_hostname() {
 
   log_info "Hostname selected: ${response}.${response_domain}"
   printf '%s\n%s\n' "$response" "$response_domain"
-}configure_time_and_locale() {
+}
+configure_time_and_locale() {
   local root_mount="$1"
   local timezone="$2"
   local hostname="$3"
@@ -1482,6 +1483,8 @@ main() {
   local install_podman_pkgs
   local -r my_shell="/usr/bin/bash"
   local -r efi_partition_size="550M"
+  local my_host_name_default="arch"
+  local host_domain_default="localdomain"
   local my_host_name_dyn=""
   local host_domain_dyn=""
   readonly keyboard_layout="us"
@@ -1530,7 +1533,7 @@ main() {
   {
     read -r my_host_name_dyn
     read -r host_domain_dyn
-  } < <(get_hostname "${my_host_name_default}" "${host_domain}")
+  } < <(get_hostname "${my_host_name_default}" "${host_domain_default}")
   log_info "  Hostname: ${my_host_name_dyn}.${host_domain_dyn}"
 
   read -rp "Proceed? [y/N]: " confirm
