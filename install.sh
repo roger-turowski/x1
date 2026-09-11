@@ -1061,27 +1061,28 @@ mount_partitions() {
     log_error "Failed to mount data logical volume /dev/system/data to $root_mount/data"
 }
 get_hostname() {
-  local response
-  while true; do
-    read -r -p "Hostname for the new system [default: ${my_host_name}]: " response
-    response="${response:-${my_host_name}}"
+  local default_host="${1:-arch}"
+  local default_domain="${2:-localdomain}"
+  local response response_domain
 
-    # RFC 1123: letters/digits/hyphen, no leading/trailing hyphen, max 63 chars
+  while true; do
+    read -r -p "Hostname for the new system [default: ${default_host}]: " response
+    response="${response:-${default_host}}"
+
     if [[ ! "$response" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]; then
       printf 'Invalid hostname: %s\nUse letters, digits and hyphens only.\n' "$response" >&2
       continue
     fi
 
-    read -r -p "Domain for /etc/hosts entry [default: ${host_domain}]: " response_domain
-    response_domain="${response_domain:-${host_domain}}"
+    read -r -p "Domain for /etc/hosts entry [default: ${default_domain}]: " response_domain
+    response_domain="${response_domain:-${default_domain}}"
 
     break
   done
 
   log_info "Hostname selected: ${response}.${response_domain}"
   printf '%s\n%s\n' "$response" "$response_domain"
-}
-configure_time_and_locale() {
+}configure_time_and_locale() {
   local root_mount="$1"
   local timezone="$2"
   local hostname="$3"
@@ -1481,17 +1482,11 @@ main() {
   local install_podman_pkgs
   local -r my_shell="/usr/bin/bash"
   local -r efi_partition_size="550M"
-  readonly keyboard_layout="us"
   local my_host_name_dyn=""
   local host_domain_dyn=""
-  # local root_partition_size="0" # Use all remaining space for root
-  #readonly disk_size_root=128G
-  # readonly disk_pct_of_free_root=40
-  #readonly disk_size_swap=4G
-  #readonly disk_pct_of_free_home=100
-
+  readonly keyboard_layout="us"
   # endregion - main variables
-  # region - completed function calls
+
   check_for_root
   configure_time_preinstallation "$my_timezone"
   configure_pacman_preinstallation "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
@@ -1535,8 +1530,7 @@ main() {
   {
     read -r my_host_name_dyn
     read -r host_domain_dyn
-  } < <(get_hostname)
-
+  } < <(get_hostname "${my_host_name_default}" "${host_domain}")
   log_info "  Hostname: ${my_host_name_dyn}.${host_domain_dyn}"
 
   read -rp "Proceed? [y/N]: " confirm
@@ -1650,8 +1644,6 @@ main() {
   arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
   create_post_install_scripts_for_user "${my_root_mount}" "${my_user_id}"
-
-  # endregion - completed function calls
 
   # Enable oh-my-posh in zsh
   echo -e "\neval \"\$(oh-my-posh init zsh)\"" >> "$my_root_mount/home/$my_user_id/.zshrc";
