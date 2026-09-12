@@ -1450,6 +1450,7 @@ After=local-fs.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/snapper-initial-setup.sh
+ExecStart=/usr/bin/snapper -c root create --description=baseline
 RemainAfterExit=yes
 
 [Install]
