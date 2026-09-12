@@ -1435,6 +1435,7 @@ snapper -c root create-config /
 snapper -c root set-config ALLOW_GROUPS="wheel" SYNC_ACL=yes
 sed -i '/^PRUNENAMES/ s/"$/.snapshots"/' /etc/updatedb.conf
 mount /.snapshots
+snapper -c root create --description "baseline"
 SETUP_EOF
 
   chmod 755 "${root_mount}/usr/local/sbin/snapper-initial-setup.sh" || \
@@ -1450,7 +1451,6 @@ After=local-fs.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/snapper-initial-setup.sh
-ExecStart=/usr/bin/snapper -c root create --description=baseline
 RemainAfterExit=yes
 
 [Install]
