@@ -342,7 +342,7 @@ configure_pacman_preinstallation() {
   log_info "Pacman pre-install configuration updated successfully."
   # Set-up the fastest Arch mirrors
   reflector --age 6 --country us --latest 8 --number 5 --protocol https --sort rate --verbose --save "${pacman_mirrorlist}"
-  pacman --noconfirm --quiet -Sy archlinux-keyring
+  pacman --noconfirm -Sy archlinux-keyring
 }
 ask_install_de_native() {
   # Function: ask_install_de_native
@@ -550,7 +550,7 @@ wipe_disk_signatures() {
 install_preinstall_pkgs() {
   local pkgs=("$@")
   log_info "Installing required preinstall packages"
-  pacman --noprogressbar --needed --noconfirm --quiet -Sy "${pkgs[@]}" || {
+  pacman --needed --noconfirm -Sy "${pkgs[@]}" || {
     log_error "Failed to install required preinstall packages: $*"
   }
   log_info "Required preinstall packages installed successfully"
@@ -832,7 +832,7 @@ nvme_secure_erase() {
     log_info "Performing NVMe secure erase on $disk"
 
     # Ensure nvme-cli is available
-    pacman -Q nvme-cli &>/dev/null || pacman -Sy --noprogressbar --noconfirm --quiet nvme-cli
+    pacman -Q nvme-cli &>/dev/null || pacman -Sy --noconfirm nvme-cli
 
     # Format the namespace — ses=1 zeros all user data
     nvme format "$disk" --ses=1 -f || log_error "NVMe secure erase failed on $disk"
@@ -1319,18 +1319,18 @@ install_gpu_drivers() {
             arch-chroot "$root_mount" pacman -S --noconfirm linux-headers base-devel
             
             # Install nvidia-dkms (handles kernel updates automatically)
-            arch-chroot "$root_mount" pacman -S --noprogressbar --noconfirm nvidia-dkms --quiet nvidia-utils libva-nvidia-driver
+            arch-chroot "$root_mount" pacman -S --noconfirm nvidia-dkms nvidia-utils libva-nvidia-driver
             
             # Configure GRUB
             configure_grub_nvidia
             ;;
         AMD)
             log_info "Installing AMD drivers..."
-            arch-chroot "$root_mount" pacman -S --noprogressbar --noconfirm --quiet mesa xf86-video-amdgpu amdgpu_top amdsmi
+            arch-chroot "$root_mount" pacman -S --noconfirm mesa xf86-video-amdgpu amdgpu_top amdsmi
             ;;
         Intel)
             log_info "Installing Intel drivers..."
-            arch-chroot "$root_mount" pacman -S --noprogressbar --noconfirm --quiet mesa lib32-mesa intel-media-driver intel-ucode
+            arch-chroot "$root_mount" pacman -S --noconfirm mesa lib32-mesa intel-media-driver intel-ucode
             ;;
         *)
             log_warn "Unknown GPU detected. Manual intervention may be required."
@@ -1610,12 +1610,12 @@ main() {
 
   if [ "$install_podman_pkgs" -eq 0 ]; then
     log_info "Installing Podman packages"
-    arch-chroot $my_root_mount pacman -S --noprogressbar --needed --noconfirm --quiet "${podman_pkgs[@]}"
+    arch-chroot $my_root_mount pacman -S --needed --noconfirm "${podman_pkgs[@]}"
   fi
 
   if [ "$install_gui_apps" -eq 0 ]; then
     # Install KDE Plasma and sddm
-    arch-chroot $my_root_mount pacman -S --noprogressbar --needed --noconfirm --quiet xorg sddm plasma kde-applications
+    arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm plasma kde-applications
     
     # Enable SDDM display manager
     arch-chroot $my_root_mount systemctl enable sddm
@@ -1625,9 +1625,9 @@ main() {
     arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
     # Install the gui packages
-    arch-chroot $my_root_mount pacman -Sy --noprogressbar --needed --noconfirm --quiet "${gui_pkgs[@]}"
+    arch-chroot $my_root_mount pacman -Sy --needed --noconfirm "${gui_pkgs[@]}"
     if [ "$install_podman_pkgs" -eq 0 ]; then
-      arch-chroot $my_root_mount pacman -S --noprogressbar --needed --noconfirm --quiet podman-desktop
+      arch-chroot $my_root_mount pacman -S --needed --noconfirm podman-desktop
     fi
     
     # Add my ID to the wireshark group so I can view perform package captures
@@ -1639,7 +1639,7 @@ main() {
   arch-chroot $my_root_mount usermod -aG video $my_user_id
   
   # Install snapper
-  arch-chroot $my_root_mount pacman -S --needed --noconfirm --quiet snapper snap-pac inotify-tools
+  arch-chroot $my_root_mount pacman -S --needed --noconfirm snapper snap-pac inotify-tools
 
   configure_snapper_first_boot "${my_root_mount}"
   
