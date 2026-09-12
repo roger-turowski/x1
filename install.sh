@@ -87,6 +87,7 @@ readonly pacstrap_pkgs=(
   acpid
   alsa-firmware
   alsa-utils
+  attr
   avahi
   base
   base-devel
@@ -148,6 +149,7 @@ readonly pacstrap_pkgs=(
   thin-provisioning-tools
   tlp
   tmux
+  tree
   util-linux
   vde2
   vifm
