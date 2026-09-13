@@ -1468,7 +1468,7 @@ UNIT_EOF
 create_script_to_install_chezmoi() {
   local root_mount="$1"
   local user_id="$2"
-  local script_path="${root_mount}/home/${user_id}/Scripts/install_chezmoi.sh"
+  local script_path="${root_mount}/home/${user_id}/Scripts/install-chezmoi.sh"
 
   {
     cat <<'CHEZMOI_EOF'
