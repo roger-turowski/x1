@@ -1091,7 +1091,7 @@ configure_time_and_locale() {
   local hostname="$3"
   local host_domain="$4"
 
-  arch-chroot "$root_mount" /usr/bin/env bash -s "$timezone" "$hostname" << CHROOT_EOF
+  arch-chroot "$root_mount" /usr/bin/env bash -s "$timezone" "$hostname" "$host_domain" << 'CHROOT_EOF'
     export LANG=C
     set -e
 
@@ -1101,6 +1101,7 @@ configure_time_and_locale() {
 
     timezone="$1"
     hostname="$2"
+    hostdomain="$3"
 
     log_info "Configuring time and locale in chroot environment"
 
@@ -1324,7 +1325,7 @@ install_gpu_drivers() {
             arch-chroot "$root_mount" pacman -S --noconfirm nvidia-dkms nvidia-utils libva-nvidia-driver
             
             # Configure GRUB
-            configure_grub_nvidia
+            configure_grub_nvidia "$root_mount"
             ;;
         AMD)
             log_info "Installing AMD drivers..."
@@ -1345,19 +1346,31 @@ install_gpu_drivers() {
     log_info "Driver installation complete. Reboot required."
 }
 configure_grub_nvidia() {
-    local grub_cfg="/etc/default/grub"
-    local target_params="nvidia-drm.modeset=1"
-    
-    # Check if parameter already exists to avoid duplicates
+  local root_mount="$1"
+  arch-chroot "$root_mount" /usr/bin/env bash << 'CHROOT_EOF'
+    export LANG=C
+    set -e
+
+    log_info()  { echo "[INFO] $*"; }
+    log_error() { echo "[ERROR] $*" >&2; exit 1; }
+
+    grub_cfg="/etc/default/grub"
+    target_params="nvidia-drm.modeset=1"
+
+    log_info "Configuring GRUB for nvidia drivers"
+
     if ! grep -q "$target_params" "$grub_cfg"; then
-        sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"\(.*\)\"/GRUB_CMDLINE_LINUX_DEFAULT=\"\1 $target_params\"/" "$grub_cfg"
-        echo "Added kernel parameters for NVIDIA."
-        
-        # Regenerate GRUB config
-        grub-mkconfig -o /boot/grub/grub.cfg
+      sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"\(.*\)\"/GRUB_CMDLINE_LINUX_DEFAULT=\"\1 $target_params\"/" "$grub_cfg" || \
+        log_error "Failed to add target parameters for nvidia to GRUB command line"
+      log_info "Added kernel parameters for NVIDIA."
+
+      grub-mkconfig -o /boot/grub/grub.cfg || \
+        log_error "Failed to regenerate GRUB config after adding nvidia parameters"
+      log_info "Regenerated GRUB config after adding nvidia parameters"
     else
-        echo "NVIDIA kernel parameters already present."
+        log_info "NVIDIA kernel parameters already present."
     fi
+CHROOT_EOF
 }
 create_post_install_scripts_for_user() {
   local root_mount="$1"
