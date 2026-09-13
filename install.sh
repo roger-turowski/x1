@@ -1465,6 +1465,29 @@ UNIT_EOF
 
   log_info "Snapper first-boot unit created and enabled"
 }
+create_script_to_install_chezmoi() {
+  local root_mount="$1"
+  local user_id="$2"
+  local script_path="${root_mount}/home/${user_id}/Scripts/install_chezmoi.sh"
+
+  {
+    cat <<'CHEZMOI_EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Install Chezmoi program executable in ~/.local/bin
+[ -d "${HOME}/.local/bin" ] && echo "Chezmoi directory exists" || { mkdir -p "${HOME}/.local/bin" && echo "Chezmoi directory created"; }
+sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "${HOME}/.local/bin"
+
+# Apply dotfiles from the repository
+"${HOME}/.local/bin/chezmoi" init --apply https://github.com/roger-turowski/x3.git
+CHEZMOI_EOF
+  } > "$script_path" || \
+    log_error "Failed to create $script_path"
+
+  chmod +x "$script_path" || \
+    log_error "Failed to make $script_path script executable"
+}
 # endregion - Function Definitions
 # =============================================================================
 # region - Main Script Execution
@@ -1652,11 +1675,9 @@ main() {
 
   create_post_install_scripts_for_user "${my_root_mount}" "${my_user_id}"
 
-  # Enable oh-my-posh in zsh
-  echo -e "\neval \"\$(oh-my-posh init zsh)\"" >> "$my_root_mount/home/$my_user_id/.zshrc";
-  arch-chroot $my_root_mount chown $my_user_id:$my_user_id /home/$my_user_id/.zshrc
-
   create_script_to_install_flatpack_apps "${my_root_mount}" "${my_user_id}"
+
+  create_script_to_install_chezmoi "${my_root_mount}" "${my_user_id}"
 
   arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
@@ -1669,7 +1690,6 @@ main() {
   # Use the current mirrorlist in the final install, after /etc
   cp "${pacman_mirrorlist}" "${my_root_mount}${pacman_mirrorlist}"
   
-
   echo -e "${success_color}Please set a password for the new root account:${no_color}"
   arch-chroot $my_root_mount passwd root
 
