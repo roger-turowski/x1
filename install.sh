@@ -26,7 +26,7 @@
 # - Add error handling for each major step
 # - Test on real hardware and different VM platforms
 # - Add support for other desktop environments
-# - Add support for different filesystems (XFS, ext4, etc.) 
+# - Add support for different filesystems (XFS, ext4, etc.)
 # - Add support for different partition schemes (MBR, etc.)
 
 # Virtualbox Guest Notes
@@ -65,14 +65,14 @@ readonly success_color="\e[1;32m"
 readonly no_color="\e[0m"
 # Mount options for BTRFS subvolumes
 readonly MOUNTOPTS="noatime,ssd,space_cache=v2,compress=zstd,discard=async"
-# Options for pacman 
+# Options for pacman
 readonly pacman_conf="/etc/pacman.conf"
 readonly pacman_mirrorlist="/etc/pacman.d/mirrorlist"
 readonly pacman_parallel_downloads=7
 readonly pacman_color_output=true
 # readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
 # Application configuration files
-# readonly snapper_conf="/etc/snapper/configs/root" 
+# readonly snapper_conf="/etc/snapper/configs/root"
 # readonly updatedb_conf="/etc/updatedb.conf"
 # Packages to install
 readonly preinstall_pkgs=(
@@ -165,10 +165,10 @@ readonly pacstrap_pkgs=(
 readonly podman_pkgs=(
   # Podman related packages
   podman
-  buildah 
+  buildah
   fuse-overlayfs # For podman rootless containers
   podman-docker
-  podlet # For podman 
+  podlet # For podman
   podman-compose
   skopeo # image building and transferring
   distrobox # Works with Podman
@@ -290,7 +290,7 @@ _log() {
   fi
 }
 log_info()  {
-  _log "INFO"  "$@"; 
+  _log "INFO"  "$@";
 }
 log_warn()  {
   _log "WARN"  "$@";
@@ -366,7 +366,7 @@ ask_install_de_native() {
   #   depending on the specific DE, the platform, and the native libraries in question.
   PS3="Select an option: "
   options=("Yes, install Desktop Environment" "No, skip Desktop Environment")
-  
+
   select opt in "${options[@]}"; do
     case $opt in
       "Yes, install Desktop Environment")
@@ -375,7 +375,7 @@ ask_install_de_native() {
       "No, skip Desktop Environment")
         return 1
         ;;
-      *) 
+      *)
         echo "Invalid option $REPLY";;
     esac
   done
@@ -399,7 +399,7 @@ ask_install_podman_pkgs() {
   # - Adapt this script with care as it may cause changes in system packages and services.
   PS3="Select an option: "
   options=("Yes, install Podman packages" "No, skip Podman packages")
-  
+
   select opt in "${options[@]}"; do
     case $opt in
       "Yes, install Podman packages")
@@ -408,7 +408,7 @@ ask_install_podman_pkgs() {
       "No, skip Podman packages")
         return 1
         ;;
-      *) 
+      *)
         echo "Invalid option $REPLY";;
     esac
   done
@@ -750,7 +750,7 @@ make_password_hash() {
   # Generate a salt for the password hash
   # my_salt=$(tr -dc '0-9a-zA-Z' < /dev/urandom | head -c 16)
   local my_salt
-  
+
   my_salt=$(tr -dc '0-9a-zA-Z' </dev/urandom | head -c16 || true)
 
   echo "Create a password for $my_user_id"
@@ -783,10 +783,10 @@ determine_cpu_firmware() {
 }
 determine_hypervisor_packages() {
   # Detect if running on a hypervisor and install the correct additions
-  
+
   local my_hypervisor_manufacturer
   local my_hypervisor_product
-  
+
   if (grep -q "^flags.* hypervisor" "/proc/cpuinfo"); then
     log_info "Hypervisor is detected"
     my_hypervisor_manufacturer=$(dmidecode -t system | grep 'Manufacturer' | cut -c 16-)
@@ -897,7 +897,7 @@ create_physical_volumes() {
   # LVM header region that won't be covered by any LV
   wipefs --all --force "$root_partition" 2>/dev/null || true
   dd if=/dev/zero of="$root_partition" bs=1M count=10 || true
-  
+
   log_info "Creating physical volume on $root_partition"
   # Create a physical volume to contain the volume group "system"
   pvcreate -ff "$root_partition" || \
@@ -919,7 +919,7 @@ create_logical_volumes() {
 
   lvcreate -L "${swap_size}" -n swap system || \
     log_error "Failed to create swap logical volume"
-  
+
   # Check if enough space remains for the requested home size
   local free_pe
   free_pe=$(vgs --noheadings -o vg_free_count system) || \
@@ -972,10 +972,10 @@ format_the_partitions() {
   # Create swap space
   wipefs --all --force /dev/system/swap || \
     log_error "Failed to wipe swap logical volume /dev/system/swap"
-  
+
   mkswap -L swap /dev/system/swap || \
     log_error "Failed to create swap space on /dev/system/swap"
-  
+
   swapon /dev/system/swap || \
     log_error "Failed to enable swap on /dev/system/swap"
 }
@@ -1177,7 +1177,7 @@ install_and_configure_grub() {
   # Install and configure GRUB for normal and LTS kernels
   local root_mount="$1"
   log_info "Installing and configuring GRUB"
-  
+
   arch-chroot "$root_mount" /usr/bin/env bash << 'CHROOT_EOF'
     export LANG=C
     set -e
@@ -1201,11 +1201,11 @@ install_and_configure_grub() {
 
     # Apply GRUB_DEFAULT
     sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"${SUBMENU_ID}>${ENTRY_ID}\"/" /etc/default/grub
-    
+
     # Configure custom GRUB colors
     sed -i 's/^#GRUB_COLOR_NORMAL=.*/GRUB_COLOR_NORMAL="cyan\/blue"/' /etc/default/grub
-    sed -i 's/^#GRUB_COLOR_HIGHLIGHT=.*/GRUB_COLOR_HIGHLIGHT="light-cyan\/black"/' /etc/default/grub 
-    
+    sed -i 's/^#GRUB_COLOR_HIGHLIGHT=.*/GRUB_COLOR_HIGHLIGHT="light-cyan\/black"/' /etc/default/grub
+
     # Rebuild GRUB configuration to apply the new default entry
     grub-mkconfig -o /boot/grub/grub.cfg
 
@@ -1309,7 +1309,7 @@ detect_gpu() {
 install_gpu_drivers() {
     local root_mount="$1"
     local gpu_type
-    
+
     gpu_type=$(detect_gpu)
 
     log_info "Detected GPU Vendor: $gpu_type"
@@ -1317,19 +1317,19 @@ install_gpu_drivers() {
     case "$gpu_type" in
         NVIDIA)
             log_info "Installing NVIDIA proprietary drivers..."
-            
+
             # Ensure DKMS and headers are present
             arch-chroot "$root_mount" pacman -S --noconfirm linux-headers base-devel
-            
+
             # Install nvidia-dkms (handles kernel updates automatically)
             arch-chroot "$root_mount" pacman -S --noconfirm nvidia-dkms nvidia-utils libva-nvidia-driver
-            
+
             # Configure GRUB
             configure_grub_nvidia "$root_mount"
             ;;
         AMD)
             log_info "Installing AMD drivers..."
-            arch-chroot "$root_mount" pacman -S --noconfirm mesa xf86-video-amdgpu amdgpu_top amdsmi
+            arch-chroot "$root_mount" pacman -S --noconfirm mesa xf86-video-amdgpu amdgpu_top amdsmi hip-runtime-amd hipblas rocwmma rocm-hip-sdk
             ;;
         Intel)
             log_info "Installing Intel drivers..."
@@ -1339,10 +1339,10 @@ install_gpu_drivers() {
             log_warn "Unknown GPU detected. Manual intervention may be required."
             ;;
     esac
-    
+
     # Rebuild initramfs to ensure new modules are included
     arch-chroot "$root_mount" mkinitcpio -P
-    
+
     log_info "Driver installation complete. Reboot required."
 }
 configure_grub_nvidia() {
@@ -1379,8 +1379,8 @@ create_post_install_scripts_for_user() {
 
   mkdir -p "${root_mount}/home/${user_id}/Scripts/" || \
     log_error "Failed to create the user Scripts directory"
-  
-  { 
+
+  {
     echo '#!/usr/bin/env bash'
     echo 'set -euo pipefail'
     echo 'git clone https://aur.archlinux.org/yay.git ~/Git/yay'
@@ -1404,7 +1404,7 @@ create_post_install_scripts_for_user() {
     echo 'sudo snapper -c root create --description "baseline"'
   } > "$script_path" || \
     log_error "Failed to create $script_path"
-  
+
   chmod +x "$script_path" || \
     log_error "Failed to make $script_path script executable"
 }
@@ -1541,12 +1541,12 @@ main() {
   install_gui_apps=0
   ask_install_de_native || install_gui_apps=1
   log_info "install_gui_apps is ${install_gui_apps}"
-  
+
   # install_podman_pkgs=$(ask_install_podman_pkgs)
   install_podman_pkgs=0
   ask_install_podman_pkgs || install_podman_pkgs=1
   log_info "install_podman_pkgs is ${install_podman_pkgs}"
-  
+
   if ! install_disk=$(get_install_disk); then
     printf 'No disk selected. Exiting.\n' >&2
     exit 1
@@ -1608,7 +1608,7 @@ main() {
   # create_logical_volumes "${disk_size_root}" "$disk_size_swap" "${disk_pct_of_free_home}%"
   # Create logical volumes with individual sizes
   create_logical_volumes "$ROOT_SIZE" "$SWAP_SIZE" "$HOME_SIZE" "$DATA_SIZE"
-  
+
   format_the_partitions "$my_partition_efi"
 
   create_btrfs_subvolumes "$my_root_mount"
@@ -1627,9 +1627,9 @@ main() {
     log_error "Failed to generate the File System TABle (fstab) using UUID numbers"
 
   install_gpu_drivers "$my_root_mount"
- 
+
   configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name_dyn" "$host_domain_dyn"
- 
+
   # Enable color output for pacman and specify the number of parallel downloads
   arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
 
@@ -1654,7 +1654,7 @@ main() {
   if [ "$install_gui_apps" -eq 0 ]; then
     # Install KDE Plasma and sddm
     arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm plasma kde-applications
-    
+
     # Enable SDDM display manager
     arch-chroot $my_root_mount systemctl enable sddm
 
@@ -1667,20 +1667,20 @@ main() {
     if [ "$install_podman_pkgs" -eq 0 ]; then
       arch-chroot $my_root_mount pacman -S --needed --noconfirm podman-desktop
     fi
-    
+
     # Add my ID to the wireshark group so I can view perform package captures
     arch-chroot $my_root_mount usermod -aG wireshark $my_user_id
 
   fi
-  
+
   # Add my ID to the video group so I can view GPU performance counters
   arch-chroot $my_root_mount usermod -aG video $my_user_id
-  
+
   # Install snapper
   arch-chroot $my_root_mount pacman -S --needed --noconfirm snapper snap-pac inotify-tools
 
   configure_snapper_first_boot "${my_root_mount}"
-  
+
   configure_grub_for_snapshot_recovery "${my_root_mount}"
 
   # Allow root to have ssh access initially for troubleshooting while developing
@@ -1699,15 +1699,15 @@ main() {
   cp install.sh $my_root_mount/root/Scripts
   chmod -x $my_root_mount/root/Scripts/install.sh
   cp "$LOG_FILE" $my_root_mount/root/
-  
+
   # Use the current mirrorlist in the final install, after /etc
   cp "${pacman_mirrorlist}" "${my_root_mount}${pacman_mirrorlist}"
-  
+
   echo -e "${success_color}Please set a password for the new root account:${no_color}"
   arch-chroot $my_root_mount passwd root
 
   sync
-  
+
   log_info "Script finished! Please reboot."
 }
 # endregion - Main Script Execution
