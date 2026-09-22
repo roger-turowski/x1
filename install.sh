@@ -1331,7 +1331,7 @@ install_gpu_drivers() {
             ;;
         AMD)
             log_info "Installing AMD drivers..."
-            arch-chroot "$root_mount" pacman -S --noconfirm mesa xf86-video-amdgpu amdgpu_top amdsmi
+            arch-chroot "$root_mount" pacman -S --noconfirm mesa xf86-video-amdgpu amdgpu_top amdsmi hip-runtime-amd hipblas rocwmma rocm-hip-sdk
             ;;
         Intel)
             log_info "Installing Intel drivers..."
