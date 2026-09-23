@@ -1696,6 +1696,10 @@ main() {
 
   arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
+  # Add a symlink to use ncurses6 instead of ncurses5 for PassMark Performance Test for Linux compatibility
+  arch-chroot $my_root_mount ln -s /usr/lib/libtinfo.so.6 /usr/lib/libtinfo.so.5
+  arch chroot $my_root_mount ln -s /usr/lib/libncursesw.so.6 /usr/lib/libncurses.so.5
+
   # Copy this script to the root home directory
   mkdir -p "${my_root_mount}/root/Scripts"
   cp install.sh $my_root_mount/root/Scripts
