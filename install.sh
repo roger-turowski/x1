@@ -1526,6 +1526,8 @@ configure_reflector_after_pacstrap() {
   #   1 - Prerequisites or file not found
   #   2 - Modification or verification failure
   # ============================================================================
+# Arguments: $1 - chroot mount point (e.g., /mnt)
+  # Returns: 0 success, 1 missing prerequisites, 2 edit/verification failure
   local root_mount="${1:-/mnt}"
   local conf="${root_mount}/etc/xdg/reflector/reflector.conf"
 
@@ -1534,56 +1536,38 @@ configure_reflector_after_pacstrap() {
     return 1
   fi
 
-  local backup
-  backup="${conf}.bak.$(date +%Y%m%d%H%M%S)" || {
-    log_failure "Failed to generate backup filename timestamp"
-    return 2
-  }
-
+  # Backup the original before clobbering it
+  local backup="${conf}.bak.$(date +%Y%m%d%H%M%S)"
   if ! cp -p "$conf" "$backup"; then
     log_failure "Failed to create backup, aborting modification of ${conf}"
     return 2
   fi
-
   log_debug "reflector.conf backup created: ${backup}"
 
-  # Remove any existing (active or commented) instances of the managed
-  # directives, then append the canonical block. Deterministic and
-  # idempotent regardless of what the stock file contains.
-  local tmp="${conf}.tmp.$$"
-  if ! sed -E '/^[[:space:]]*#+[[:space:]]*--(country|age|sort|latest)[[:space:]=]/d' "$conf" > "$tmp"; then
-    log_failure "sed failed while modifying ${conf}; original left intact"
-    rm -f "$tmp"
-    return 2
-  fi
+  # Write the canonical configuration file wholesale
+  cat > "$conf" <<'REFLECTOR_CONF'
+--age 6
+--country US
+--latest 8
+--protocol https
+--save /etc/pacman.d/mirrorlist
+--sort rate
+REFLECTOR_CONF
 
-  printf '%s\n' \
-    '--country US' \
-    '--age 6' \
-    '--sort rate' \
-    '--latest 8' >> "$tmp" || {
-    log_failure "Failed to append canonical directives to ${tmp}"
-    rm -f "$tmp"
-    return 2
-  }
-
-  # Post-conditions — verify the assembled file before committing
+  # Verify the four managed directives before generating the mirrorlist
   local directive failed=0
   for directive in "--country US" "--age 6" "--sort rate" "--latest 8"; do
-    if ! grep -qxF -e "$directive" "$tmp"; then
-      log_failure "Post-condition failed: '${directive}' not present in ${tmp}"
+    if ! grep -qxF -e "$directive" "$conf"; then
+      log_failure "Post-condition failed: '${directive}' not present in ${conf}"
       failed=1
     fi
   done
 
   if (( failed )); then
     log_failure "Verification failed; restoring original reflector.conf"
-    rm -f "$tmp"
+    mv -f "$backup" "$conf"
     return 2
   fi
-
-  # Commit the verified file
-  mv -f "$tmp" "$conf"
 
   log_info "Reflector configured: US mirrors, latest 8, sorted by rate, max age 6h"
   log_debug "Effective directives: $(grep -E '^--' "$conf" | tr '\n' ' ')"
@@ -1593,6 +1577,11 @@ configure_reflector_after_pacstrap() {
   else
     log_warn "Initial mirrorlist generation failed — reflector.timer will retry on first boot"
   fi
+
+  cat > "${root_mount}/etc/systemd/system/reflector.timer.d/10-firstboot.conf" <<'TIMER'
+[Timer]
+OnBootSec=5min
+TIMER
 
   return 0
 }
