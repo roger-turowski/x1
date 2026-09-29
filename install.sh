@@ -302,6 +302,11 @@ log_error() {
    _log "ERROR" "$@"
    exit 1
 }
+log_failure() {
+  # Logs at ERROR severity without terminating the script.
+  # Use when the caller handles the failure via return codes.
+  _log "ERROR" "$@"
+}
 log_debug() {
     [[ "$VERBOSE" == "true" ]] || return 0
     _log "DEBUG" "$@"
