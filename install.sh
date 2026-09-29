@@ -70,7 +70,7 @@ readonly pacman_conf="/etc/pacman.conf"
 readonly pacman_mirrorlist="/etc/pacman.d/mirrorlist"
 readonly pacman_parallel_downloads=7
 readonly pacman_color_output=true
-# readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
+readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
 # Application configuration files
 # readonly snapper_conf="/etc/snapper/configs/root"
 # readonly updatedb_conf="/etc/updatedb.conf"
@@ -121,6 +121,7 @@ readonly pacstrap_pkgs=(
   grub-btrfs
   htop
   inetutils
+  iperf3
   ipset
   linux
   linux-firmware
@@ -1503,6 +1504,85 @@ CHEZMOI_EOF
   chmod +x "$script_path" || \
     log_error "Failed to make $script_path script executable"
 }
+configure_reflector_after_pacstrap() {
+  # =============================================================================
+  # configure_reflector_after_pacstrap
+  # -----------------------------------------------------------------------------
+  # Updates /etc/xdg/reflector/reflector.conf inside the chroot with
+  # standardized mirror selection parameters. Backs up the original file,
+  # rewrites commented/uncommented directives idempotently, verifies the
+  # result, and generates an initial mirrorlist.
+  #
+  # Arguments:
+  #   $1 - Path to the chroot mount point (e.g., /mnt)
+  #
+  # Returns:
+  #   0 - Success
+  #   1 - Prerequisites or file not found
+  #   2 - Modification or verification failure
+  # ============================================================================
+  local root_mount="${1:-/mnt}"
+  local conf="${root_mount}/etc/xdg/reflector/reflector.conf"
+
+  if [[ ! -f "$conf" ]]; then
+    log_failure "reflector.conf not found in chroot: ${conf}"
+    return 1
+  fi
+
+  local backup="${conf}.bak.$(date +%Y%m%d%H%M%S)"
+  if ! cp -p "$conf" "$backup"; then
+    log_failure "Failed to create backup, aborting modification of ${conf}"
+    return 2
+  fi
+  log_debug "reflector.conf backup created: ${backup}"
+
+  # Edit a copy; the original is untouched unless the full pipeline succeeds,
+  # so a sed failure leaves the config in its pristine state by construction.
+  local tmp="${conf}.tmp.$$"
+  if ! sed -E '
+    s/^[[:space:]]*#[[:space:]]*--country.*$/--country US/;
+    t; s/^[[:space:]]*--country.*$/--country US/;
+    s/^[[:space:]]*#[[:space:]]*--age.*$/--age 6/;
+    t; s/^[[:space:]]*--age.*$/--age 6/;
+    s/^[[:space:]]*#[[:space:]]*--sort.*$/--sort rate/;
+    t; s/^[[:space:]]*--sort.*$/--sort rate/;
+    s/^[[:space:]]*#[[:space:]]*--latest.*$/--latest 8/;
+    t; s/^[[:space:]]*--latest.*$/--latest 8/
+  ' "$conf" > "$tmp"; then
+    log_failure "sed failed while modifying ${conf}; original left intact"
+    rm -f "$tmp"
+    return 2
+  fi
+
+  # Post-conditions — accumulate all failures before deciding
+  local directive failed=0
+  for directive in "--country US" "--age 6" "--sort rate" "--latest 8"; do
+    if ! grep -qxF "$directive" "$tmp"; then
+      log_failure "Post-condition failed: '${directive}' not present in ${conf}"
+      failed=1
+    fi
+  done
+
+  if (( failed )); then
+    log_failure "Verification failed; restoring original reflector.conf"
+    rm -f "$tmp"
+    return 2
+  fi
+
+  # Commit the verified file
+  mv -f "$tmp" "$conf"
+
+  log_info "Reflector configured: US mirrors, latest 8, sorted by rate, max age 6h"
+  log_debug "Effective directives: $(grep -E '^--' "$conf" | tr '\n' ' ')"
+
+  if arch-chroot "$root_mount" reflector --verbose --save /etc/pacman.d/mirrorlist; then
+    log_info "Initial mirrorlist generated successfully"
+  else
+    log_warn "Initial mirrorlist generation failed — reflector.timer will retry on first boot"
+  fi
+
+  return 0
+}
 # endregion - Function Definitions
 # =============================================================================
 # region - Main Script Execution
@@ -1706,10 +1786,11 @@ main() {
   chmod -x $my_root_mount/root/Scripts/install.sh
   cp "$LOG_FILE" $my_root_mount/root/
 
-  # Use the current mirrorlist in the final install, after /etc
-  cp "${pacman_mirrorlist}" "${my_root_mount}${pacman_mirrorlist}"
+  configure_reflector_after_pacstrap "$my_root_mount" || \
+    log_error "Failed to configure reflector in chroot"
 
   echo -e "${success_color}Please set a password for the new root account:${no_color}"
+
   arch-chroot $my_root_mount passwd root
 
   sync
