@@ -1534,11 +1534,12 @@ configure_reflector_after_pacstrap() {
     return 1
   fi
 
-  local backup="${conf}.bak.$(date +%Y%m%d%H%M%S)"
+  local backup
   if ! cp -p "$conf" "$backup"; then
     log_failure "Failed to create backup, aborting modification of ${conf}"
     return 2
   fi
+
   log_debug "reflector.conf backup created: ${backup}"
 
   # Edit a copy; the original is untouched unless the full pipeline succeeds,
