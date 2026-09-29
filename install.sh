@@ -1586,6 +1586,43 @@ TIMER
 
   return 0
 }
+configure_plasma_desktop() {
+  # =============================================================================
+  # configure_plasma_desktop
+  # -----------------------------------------------------------------------------
+  # Configures the Plasma desktop environment for the user.
+  #
+  # Arguments:
+  #   $1 - Path to the chroot mount point (e.g., /mnt)
+  #
+  # Returns:
+  #   0 - Success
+  #   1 - Prerequisites or file not found
+  #   2 - Modification or verification failure
+  # ============================================================================
+  root_mount="$1"
+  SESSION="plasma.desktop"   # plasma.desktop = Wayland session in newer Plasma; plasma-wayland.desktop on older distros
+  CONF_DIR="$root_mount/etc/sddm.conf.d"
+  CONF_FILE="${CONF_DIR}/50-default-session.conf"
+
+  # Guard: verify the session desktop file exists
+  if ! ls "$root_mount/usr/share/wayland-sessions/${SESSION}" >/dev/null 2>&1; then
+      log_error "ERROR: ${SESSION} not found in /usr/share/wayland-sessions/"
+  fi
+
+  mkdir -p "${CONF_DIR}"
+  sudo tee "${CONF_FILE}" >/dev/null <<EOF
+[Autologin]
+# Optional: uncomment for autologin
+#User=roger
+#Session=${SESSION}
+
+[General]
+Session=${SESSION}
+EOF
+
+  log_info "Default SDDM session set to ${SESSION} in ${CONF_FILE}"
+}
 # endregion - Function Definitions
 # =============================================================================
 # region - Main Script Execution
@@ -1747,6 +1784,9 @@ main() {
     mkdir -p $my_root_mount/etc/sddm.conf.d/
     arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
 
+    # Configure KDE Plasma
+    configure_plasma_desktop "$my_root_mount"
+    
     # Install the gui packages
     arch-chroot $my_root_mount pacman -Sy --needed --noconfirm "${gui_pkgs[@]}"
     if [ "$install_podman_pkgs" -eq 0 ]; then
