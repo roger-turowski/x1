@@ -351,7 +351,7 @@ configure_pacman_preinstallation() {
 
   log_info "Pacman pre-install configuration updated successfully."
   # Set-up the fastest Arch mirrors
-  reflector --age 6 --country us --latest 5 --number 5 --protocol https --sort rate --verbose --save "${pacman_mirrorlist}"
+  reflector --age 6 --country US --latest 5 --protocol https --sort rate --verbose --save "${pacman_mirrorlist}"
   pacman --noconfirm -Sy archlinux-keyring
 }
 ask_install_de_native() {
@@ -1573,12 +1573,6 @@ REFLECTOR_CONF
   log_info "Reflector configured: US mirrors, latest 5, sorted by rate, max age 6h"
   log_debug "Effective directives: $(grep -E '^--' "$conf" | tr '\n' ' ')"
 
-  if arch-chroot "$root_mount" reflector --verbose --save /etc/pacman.d/mirrorlist; then
-    log_info "Initial mirrorlist generated successfully"
-  else
-    log_warn "Initial mirrorlist generation failed — reflector.timer will retry on first boot"
-  fi
-
   cat > "${root_mount}/etc/systemd/system/reflector.timer.d/10-firstboot.conf" <<'TIMER'
 [Timer]
 OnBootSec=5min
@@ -1831,6 +1825,8 @@ main() {
 
   configure_reflector_after_pacstrap "$my_root_mount" || \
     log_error "Failed to configure reflector in chroot"
+
+  cp "${pacman_mirrorlist}" "${my_root_mount}${pacman_mirrorlist}"
 
   echo -e "${success_color}Please set a password for the new root account:${no_color}"
 
