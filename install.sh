@@ -1547,29 +1547,31 @@ configure_reflector_after_pacstrap() {
 
   log_debug "reflector.conf backup created: ${backup}"
 
-  # Edit a copy; the original is untouched unless the full pipeline succeeds,
-  # so a sed failure leaves the config in its pristine state by construction.
+  # Remove any existing (active or commented) instances of the managed
+  # directives, then append the canonical block. Deterministic and
+  # idempotent regardless of what the stock file contains.
   local tmp="${conf}.tmp.$$"
-  if ! sed -E '
-    s/^[[:space:]]*#[[:space:]]*--country.*$/--country US/;
-    t; s/^[[:space:]]*--country.*$/--country US/;
-    s/^[[:space:]]*#[[:space:]]*--age.*$/--age 6/;
-    t; s/^[[:space:]]*--age.*$/--age 6/;
-    s/^[[:space:]]*#[[:space:]]*--sort.*$/--sort rate/;
-    t; s/^[[:space:]]*--sort.*$/--sort rate/;
-    s/^[[:space:]]*#[[:space:]]*--latest.*$/--latest 8/;
-    t; s/^[[:space:]]*--latest.*$/--latest 8/
-  ' "$conf" > "$tmp"; then
+  if ! sed -E '/^[[:space:]]*#+[[:space:]]*--(country|age|sort|latest)[[:space:]=]/d' "$conf" > "$tmp"; then
     log_failure "sed failed while modifying ${conf}; original left intact"
     rm -f "$tmp"
     return 2
   fi
 
-# Post-conditions — accumulate all failures before deciding
+  printf '%s\n' \
+    '--country US' \
+    '--age 6' \
+    '--sort rate' \
+    '--latest 8' >> "$tmp" || {
+    log_failure "Failed to append canonical directives to ${tmp}"
+    rm -f "$tmp"
+    return 2
+  }
+
+  # Post-conditions — verify the assembled file before committing
   local directive failed=0
   for directive in "--country US" "--age 6" "--sort rate" "--latest 8"; do
     if ! grep -qxF -e "$directive" "$tmp"; then
-      log_failure "Post-condition failed: '${directive}' not present in ${conf}"
+      log_failure "Post-condition failed: '${directive}' not present in ${tmp}"
       failed=1
     fi
   done
