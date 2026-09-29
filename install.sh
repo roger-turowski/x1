@@ -70,7 +70,7 @@ readonly pacman_conf="/etc/pacman.conf"
 readonly pacman_mirrorlist="/etc/pacman.d/mirrorlist"
 readonly pacman_parallel_downloads=7
 readonly pacman_color_output=true
-readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
+#readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
 # Application configuration files
 # readonly snapper_conf="/etc/snapper/configs/root"
 # readonly updatedb_conf="/etc/updatedb.conf"
@@ -1559,10 +1559,10 @@ configure_reflector_after_pacstrap() {
     return 2
   fi
 
-  # Post-conditions — accumulate all failures before deciding
+# Post-conditions — accumulate all failures before deciding
   local directive failed=0
   for directive in "--country US" "--age 6" "--sort rate" "--latest 8"; do
-    if ! grep -qxF "$directive" "$tmp"; then
+    if ! grep -qxF -e "$directive" "$tmp"; then
       log_failure "Post-condition failed: '${directive}' not present in ${conf}"
       failed=1
     fi
