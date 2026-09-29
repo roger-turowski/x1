@@ -1535,6 +1535,11 @@ configure_reflector_after_pacstrap() {
   fi
 
   local backup
+  backup="${conf}.bak.$(date +%Y%m%d%H%M%S)" || {
+    log_failure "Failed to generate backup filename timestamp"
+    return 2
+  }
+
   if ! cp -p "$conf" "$backup"; then
     log_failure "Failed to create backup, aborting modification of ${conf}"
     return 2
