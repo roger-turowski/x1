@@ -1536,19 +1536,20 @@ configure_reflector_after_pacstrap() {
     return 1
   fi
 
-  # Backup the original before clobbering it
-  local backup="${conf}.bak.$(date +%Y%m%d%H%M%S)"
+# Backup the original before clobbering it
+  local backup
+  backup="${conf}.bak.$(date +%Y%m%d%H%M%S)"
   if ! cp -p "$conf" "$backup"; then
     log_failure "Failed to create backup, aborting modification of ${conf}"
     return 2
   fi
   log_debug "reflector.conf backup created: ${backup}"
-
+  
   # Write the canonical configuration file wholesale
   cat > "$conf" <<'REFLECTOR_CONF'
 --age 6
 --country US
---latest 8
+--latest 5
 --protocol https
 --save /etc/pacman.d/mirrorlist
 --sort rate
