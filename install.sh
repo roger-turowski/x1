@@ -1775,7 +1775,7 @@ main() {
 
   if [ "$install_gui_apps" -eq 0 ]; then
     # Install KDE Plasma and sddm
-    arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm plasma kde-applications
+    arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm plasma-meta kde-applications
 
     # Enable SDDM display manager
     arch-chroot $my_root_mount systemctl enable sddm
@@ -1786,7 +1786,7 @@ main() {
 
     # Configure KDE Plasma
     configure_plasma_desktop "$my_root_mount"
-    
+
     # Install the gui packages
     arch-chroot $my_root_mount pacman -Sy --needed --noconfirm "${gui_pkgs[@]}"
     if [ "$install_podman_pkgs" -eq 0 ]; then
