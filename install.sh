@@ -351,7 +351,7 @@ configure_pacman_preinstallation() {
 
   log_info "Pacman pre-install configuration updated successfully."
   # Set-up the fastest Arch mirrors
-  reflector --age 6 --country us --latest 8 --number 5 --protocol https --sort rate --verbose --save "${pacman_mirrorlist}"
+  reflector --age 6 --country us --latest 5 --number 5 --protocol https --sort rate --verbose --save "${pacman_mirrorlist}"
   pacman --noconfirm -Sy archlinux-keyring
 }
 ask_install_de_native() {
@@ -1544,7 +1544,7 @@ configure_reflector_after_pacstrap() {
     return 2
   fi
   log_debug "reflector.conf backup created: ${backup}"
-  
+
   # Write the canonical configuration file wholesale
   cat > "$conf" <<'REFLECTOR_CONF'
 --age 6
@@ -1557,7 +1557,7 @@ REFLECTOR_CONF
 
   # Verify the four managed directives before generating the mirrorlist
   local directive failed=0
-  for directive in "--country US" "--age 6" "--sort rate" "--latest 8"; do
+  for directive in "--country US" "--age 6" "--sort rate" "--latest 5"; do
     if ! grep -qxF -e "$directive" "$conf"; then
       log_failure "Post-condition failed: '${directive}' not present in ${conf}"
       failed=1
@@ -1570,7 +1570,7 @@ REFLECTOR_CONF
     return 2
   fi
 
-  log_info "Reflector configured: US mirrors, latest 8, sorted by rate, max age 6h"
+  log_info "Reflector configured: US mirrors, latest 5, sorted by rate, max age 6h"
   log_debug "Effective directives: $(grep -E '^--' "$conf" | tr '\n' ' ')"
 
   if arch-chroot "$root_mount" reflector --verbose --save /etc/pacman.d/mirrorlist; then
