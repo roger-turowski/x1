@@ -1733,12 +1733,17 @@ main() {
 
   mount_partitions "$my_root_mount" "$my_partition_efi"
 
+  # Avoid Warnings about missing /etc/vconsole.conf during mkinitcpio
+  echo 'KEYMAP=us' > /mnt/etc/vconsole.conf
+
+  # Correct the new root home permissions to what the package manager expects
   chmod 750 /mnt/root || \
     log_error "Failed to set the permissions on /mnt/root"
 
   local -a all_pkgs=("${pacstrap_pkgs[@]}")
   [[ -n "$cpu_firmware" ]] && all_pkgs+=("$cpu_firmware")
   [[ -n "$hypervisor_pkgs" ]] && all_pkgs+=("$hypervisor_pkgs")
+
   pacstrap $my_root_mount "${all_pkgs[@]}" || \
     log_error "Failed to install base packages with pacstrap"
 
