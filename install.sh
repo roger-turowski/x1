@@ -352,7 +352,7 @@ configure_pacman_preinstallation() {
   log_info "Pacman pre-install configuration updated successfully."
   # Set-up the fastest Arch mirrors
   reflector --age 6 --country US --latest 5 --protocol https --sort rate --verbose --save "${pacman_mirrorlist}"
-  pacman --noconfirm -Sy archlinux-keyring
+  LC_ALL=C pacman -Sy --noconfirm archlinux-keyring 2>&1 | grep -vE 'warning: archlinux-keyring-[^ ]+ is up to date -- reinstalling$'
 }
 ask_install_de_native() {
   # Function: ask_install_de_native
@@ -1649,9 +1649,6 @@ main() {
   configure_time_preinstallation "$my_timezone"
   configure_pacman_preinstallation "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
   install_preinstall_pkgs "${preinstall_pkgs[@]}"
-
-  # Get root size (now interactive)
-  #root_partition_size=$(get_root_partition_size "$my_disk")
 
   # install_gui_apps=$(ask_install_de_native)
   install_gui_apps=0
