@@ -1734,7 +1734,8 @@ main() {
   mount_partitions "$my_root_mount" "$my_partition_efi"
 
   # Avoid Warnings about missing /etc/vconsole.conf during mkinitcpio
-  echo 'KEYMAP=us' > /mnt/etc/vconsole.conf
+  echo 'KEYMAP=us' > /mnt/etc/vconsole.conf || \
+    log_error "Failed to create /mnt/etc/vconsole.conf"
 
   # Correct the new root home permissions to what the package manager expects
   chmod 750 /mnt/root || \
