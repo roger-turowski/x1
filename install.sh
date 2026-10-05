@@ -1733,7 +1733,6 @@ main() {
 
   mount_partitions "$my_root_mount" "$my_partition_efi"
 
-  configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name_dyn" "$host_domain_dyn"
 
   local -a all_pkgs=("${pacstrap_pkgs[@]}")
   [[ -n "$cpu_firmware" ]] && all_pkgs+=("$cpu_firmware")
@@ -1744,8 +1743,9 @@ main() {
   genfstab -U $my_root_mount >> $my_root_mount/etc/fstab || \
     log_error "Failed to generate the File System TABle (fstab) using UUID numbers"
 
-  install_gpu_drivers "$my_root_mount"
+  configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name_dyn" "$host_domain_dyn"
 
+  install_gpu_drivers "$my_root_mount"
 
   # Enable color output for pacman and specify the number of parallel downloads
   arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
