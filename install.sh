@@ -1733,6 +1733,8 @@ main() {
 
   mount_partitions "$my_root_mount" "$my_partition_efi"
 
+  configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name_dyn" "$host_domain_dyn"
+
   local -a all_pkgs=("${pacstrap_pkgs[@]}")
   [[ -n "$cpu_firmware" ]] && all_pkgs+=("$cpu_firmware")
   [[ -n "$hypervisor_pkgs" ]] && all_pkgs+=("$hypervisor_pkgs")
@@ -1744,7 +1746,6 @@ main() {
 
   install_gpu_drivers "$my_root_mount"
 
-  configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name_dyn" "$host_domain_dyn"
 
   # Enable color output for pacman and specify the number of parallel downloads
   arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
