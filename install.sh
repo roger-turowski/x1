@@ -233,6 +233,7 @@ readonly services_to_enable=(
   acpid
 )
 readonly flatpak_apps=(
+  com.brave.Browser
   dev.bragefuglseth.Keypunch
   net.cozic.joplin_desktop
   org.deluge_torrent.deluge
