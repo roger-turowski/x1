@@ -1109,7 +1109,7 @@ configure_time_and_locale() {
 
     timezone="$1"
     hostname="$2"
-    hostdomain="$3"
+    host_domain="$3"
 
     log_info "Configuring time and locale in chroot environment"
 
