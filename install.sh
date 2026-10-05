@@ -1733,6 +1733,8 @@ main() {
 
   mount_partitions "$my_root_mount" "$my_partition_efi"
 
+  chmod 750 /mnt/root || \
+    log_error "Failed to set the permissions on /mnt/root"
 
   local -a all_pkgs=("${pacstrap_pkgs[@]}")
   [[ -n "$cpu_firmware" ]] && all_pkgs+=("$cpu_firmware")
