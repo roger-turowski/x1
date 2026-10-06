@@ -181,6 +181,7 @@ readonly gui_pkgs=(
   # Packages to install for the GUI environment
   alacritty
   archlinux-wallpaper
+  btrfs-assistant
   calibre
   code
   gimp
@@ -191,6 +192,7 @@ readonly gui_pkgs=(
   libreoffice-fresh
   meld
   network-manager-applet
+  plymouth
   scribus
   strawberry
   ttf-0xproto-nerd
@@ -251,9 +253,7 @@ readonly flatpak_apps=(
   dev.bragefuglseth.Fretboard
 )
 readonly aur_apps=(
-  btrfs-assistant
   oh-my-posh
-  plymouth
 )
 #endregion - Variables
 # =============================================================================
