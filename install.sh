@@ -80,7 +80,7 @@ readonly preinstall_pkgs=(
   whois
 )
 readonly pacstrap_pkgs=(
-  # Packages to install using pacstrap. Must not be readonly.
+  # Packages to install using pacstrap.
   # Omit CPU firmware since we will detect the CPU type and add it later.
   acpi
   acpi_call
@@ -98,7 +98,6 @@ readonly pacstrap_pkgs=(
   bluez-utils
   btop
   btrfs-progs
-  cmatrix
   cowsay
   cryptsetup
   cups
