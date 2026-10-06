@@ -117,6 +117,7 @@ readonly pacstrap_pkgs=(
   flatpak
   fzf
   git
+  glances
   grub
   grub-btrfs
   htop
