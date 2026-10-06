@@ -251,11 +251,9 @@ readonly flatpak_apps=(
   dev.bragefuglseth.Fretboard
 )
 readonly aur_apps=(
-  brave-bin
   btrfs-assistant
   oh-my-posh
   plymouth
-  ttf-ms-fonts
 )
 #endregion - Variables
 # =============================================================================
