@@ -746,28 +746,47 @@ get_partition_sizes() {
   log_info "Sizes: root=${out_root}, swap=${out_swap}, home=${out_home}, data=${out_data},  partition=${out_part_size}"
 }
 make_password_hash() {
-  # Make a password hash here with mkpasswd and assign to my_password_hash at runtime
-  # Generate a salt for the password hash
-  # my_salt=$(tr -dc '0-9a-zA-Z' < /dev/urandom | head -c 16)
+  # =============================================================================
+  # make_password_hash
+  # -----------------------------------------------------------------------------
+  # Prompts for a password, confirms it, and produces a SHA-512 hash.
+  # Re-prompts up to MAX_ATTEMPTS times if the passwords do not match.
+  #
+  # Arguments:
+  #   $1 - Name of the variable to assign the hash to (nameref)
+  #
+  # Exits (log_error) if the maximum number of attempts is exceeded.
+  # =============================================================================
+  local -n out_hash="$1"
   local my_salt
+  local confirmed_hash
+  local attempts=0
+  local max_attempts=5
 
-  my_salt=$(tr -dc '0-9a-zA-Z' </dev/urandom | head -c16 || true)
+  while true; do
+    attempts=$((attempts + 1))
+    if (( attempts > max_attempts )); then
+      log_error "Exceeded maximum password attempts (${max_attempts}). Aborting."
+    fi
 
-  echo "Create a password for $my_user_id"
-  my_password_hash=$(mkpasswd -m sha-512 --salt="$my_salt")
+    # Fresh salt for each attempt
+    my_salt=$(tr -dc '0-9a-zA-Z' </dev/urandom | head -c16 || true)
 
-  echo "Enter the password again to confirm"
-  my_password_hash_confirmed=$(mkpasswd -m sha-512 --salt="$my_salt")
+    echo "Create a password for $my_user_id"
+    out_hash=$(mkpasswd -m sha-512 --salt="$my_salt")
 
-  case $my_password_hash in
-    "$my_password_hash_confirmed")
-      log_info  "Password confirmed"
-      ;;
-    *)
-     log_error "Password not confirmed"
-      ;;
-  esac
-  printf 'Password hash generated: %s for user %s\n' "$my_password_hash" "$my_user_id" >&2
+    echo "Enter the password again to confirm"
+    confirmed_hash=$(mkpasswd -m sha-512 --salt="$my_salt")
+
+    if [[ "$out_hash" == "$confirmed_hash" ]]; then
+      log_info "Password confirmed (attempt ${attempts})"
+      break
+    fi
+
+    log_warn "Passwords did not match. Try again."
+  done
+
+  printf 'Password hash generated for user %s\n' "$my_user_id" >&2
 }
 determine_cpu_firmware() {
   # Detect the CPU type to install appropriate firmware
