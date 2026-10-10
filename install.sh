@@ -116,6 +116,7 @@ readonly pacstrap_pkgs=(
   flatpak
   fzf
   git
+  glances
   grub
   grub-btrfs
   htop
@@ -178,6 +179,7 @@ readonly gui_pkgs=(
   # Packages to install for the GUI environment
   alacritty
   archlinux-wallpaper
+  btrfs-assistant
   calibre
   code
   gimp
@@ -188,6 +190,7 @@ readonly gui_pkgs=(
   libreoffice-fresh
   meld
   network-manager-applet
+  plymouth
   scribus
   strawberry
   ttf-0xproto-nerd
@@ -230,6 +233,7 @@ readonly services_to_enable=(
   acpid
 )
 readonly flatpak_apps=(
+  com.brave.Browser
   dev.bragefuglseth.Keypunch
   net.cozic.joplin_desktop
   org.deluge_torrent.deluge
@@ -247,11 +251,7 @@ readonly flatpak_apps=(
   dev.bragefuglseth.Fretboard
 )
 readonly aur_apps=(
-  brave-bin
-  btrfs-assistant
-  oh-my-posh
-  plymouth
-  ttf-ms-fonts
+ oh-my-posh
 )
 #endregion - Variables
 # =============================================================================
