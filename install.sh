@@ -860,7 +860,7 @@ create_physical_partitions() {
   log_info "root_size = $3"
   log_info "efi_part = $4"
   log_info "root_part = $5"
-  pause
+
   log_info "Creating physical partitions on $disk"
 
   sgdisk \
@@ -919,11 +919,11 @@ create_logical_volumes() {
   log_info "Creating logical volumes (root: $root_size, swap: $swap_size, home: $home_size, data: $data_size)"
 
   # Create the logical volumes for root, swap and home
-  # lvcreate -l "${root_partition}FREE" -n root system || \
-  #  log_error "Failed to create root logical volume"
+  log_info "Creating logical volume for root: ${root_size}"
   lvcreate -L "${root_size}" -n root system || \
     log_error "Failed to create root logical volume"
 
+  log_info "Creating swap space: ${swap_size}"
   lvcreate -L "${swap_size}" -n swap system || \
     log_error "Failed to create swap logical volume"
 
@@ -941,9 +941,11 @@ create_logical_volumes() {
     log_warn "Data will be ${free_mb}MiB — less than requested ${requested_mb}MiB due to PE rounding"
   fi
 
+  log_info "Creating logical volume for home: ${home_size}"
   lvcreate -L "${home_size}" -n home system || \
     log_error "Failed to create home logical volume"
 
+  log_info "Creating logical volume for data (filling the remainder of the Volume Group): ${free_mb}"
   lvcreate -l 100%FREE -n data system || \
     log_error "Failed to create data logical volume"
 }
@@ -1383,7 +1385,7 @@ create_post_install_scripts_for_user() {
   local root_mount="$1"
   local user_id="$2"
   local script_path="${root_mount}/home/${user_id}/Scripts/enable_yay.sh"
-
+  log_info "Creating post-install scripts for user"
   mkdir -p "${root_mount}/home/${user_id}/Scripts/" || \
     log_error "Failed to create the user Scripts directory"
 
@@ -1419,7 +1421,7 @@ create_script_to_install_flatpack_apps() {
   local root_mount="$1"
   local user_id="$2"
   local script_path="${root_mount}/home/${user_id}/Scripts/install_flatpak_apps.sh"
-
+  log_info "Creating script to install Flatpak apps"
   {
     echo '#!/usr/bin/env bash'
     echo 'set -euo pipefail'
@@ -1435,7 +1437,7 @@ create_script_to_install_flatpack_apps() {
 }
 configure_grub_for_snapshot_recovery() {
   local root_mount="$1"
-  # Configure GRUB for snapshot recovery
+  log_info "Configure GRUB for snapshot recovery"
   arch-chroot "${root_mount}" sed -i 's/GRUB_DISABLE_RECOVERY=true/GRUB_DISABLE_RECOVERY=false/' /etc/default/grub
   arch-chroot "${root_mount}" grub-mkconfig -o /boot/grub/grub.cfg
   arch-chroot "${root_mount}" systemctl enable grub-btrfsd
@@ -1489,7 +1491,7 @@ create_script_to_install_chezmoi() {
   local root_mount="$1"
   local user_id="$2"
   local script_path="${root_mount}/home/${user_id}/Scripts/install-chezmoi.sh"
-
+  log_info "Creating the script to install Chezmoi"
   {
     cat <<'CHEZMOI_EOF'
 #!/usr/bin/env bash
@@ -1535,6 +1537,8 @@ main() {
   local host_domain_dyn=""
   readonly keyboard_layout="us"
   # endregion - main variables
+
+  log_info "Script started"
 
   check_for_root
   configure_time_preinstallation "$my_timezone"
@@ -1607,7 +1611,7 @@ main() {
   # create_physical_partitions "$my_disk" "$efi_partition_size" "$root_partition_size"
   # Create partitions with calculated size
   log_info "Calling create_physical_partitions my_disk=$my_disk efi_partition_size=$efi_partition_size PARTITION_SIZE=$PARTITION_SIZE my_partition_efi=$my_partition_efi my_partition_root=$my_partition_root"
-  pause
+
   create_physical_partitions "$my_disk" "$efi_partition_size" "$PARTITION_SIZE" "$my_partition_efi" "$my_partition_root"
 
   create_physical_volumes "$my_partition_root"
@@ -1692,7 +1696,7 @@ main() {
 
   configure_grub_for_snapshot_recovery "${my_root_mount}"
 
-  # Allow root to have ssh access initially for troubleshooting while developing
+  log_info "Allow root to have ssh access initially for troubleshooting while developing"
   arch-chroot $my_root_mount sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
   create_post_install_scripts_for_user "${my_root_mount}" "${my_user_id}"
@@ -1701,23 +1705,27 @@ main() {
 
   create_script_to_install_chezmoi "${my_root_mount}" "${my_user_id}"
 
+  log_info "Updating ownership of user install scripts"
   arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
-  # Copy this script to the root home directory
+  log_info "Copy this script to the root home directory"
   mkdir -p "${my_root_mount}/root/Scripts"
   cp install.sh $my_root_mount/root/Scripts
   chmod -x $my_root_mount/root/Scripts/install.sh
   cp "$LOG_FILE" $my_root_mount/root/
 
-  # Use the current mirrorlist in the final install, after /etc
+  log_info "Copying mirrorlist to use the final install, after /etc exists"
   cp "${pacman_mirrorlist}" "${my_root_mount}${pacman_mirrorlist}"
 
+  log_info "Setting password for root"
   echo -e "${success_color}Please set a password for the new root account:${no_color}"
   arch-chroot $my_root_mount passwd root
 
   sync
 
   log_info "Script finished! Please reboot."
+
+  log_info "Script finished"
 }
 # endregion - Main Script Execution
 # =============================================================================
