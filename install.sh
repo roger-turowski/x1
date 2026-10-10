@@ -1361,7 +1361,7 @@ install_gpu_drivers() {
             ;;
         Intel)
             log_info "Installing Intel drivers..."
-            arch-chroot "$root_mount" pacman -S --noconfirm mesa lib32-mesa intel-media-driver intel-ucode
+            arch-chroot "$root_mount" pacman -S --noconfirm mesa intel-media-driver intel-ucode
             ;;
         *)
             log_warn "Unknown GPU detected. Manual intervention may be required."
