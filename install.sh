@@ -70,7 +70,7 @@ readonly pacman_conf="/etc/pacman.conf"
 readonly pacman_mirrorlist="/etc/pacman.d/mirrorlist"
 readonly pacman_parallel_downloads=7
 readonly pacman_color_output=true
-#readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
+# readonly reflector_conf="/etc/xdg/reflector/reflector.conf"
 # Application configuration files
 # readonly snapper_conf="/etc/snapper/configs/root"
 # readonly updatedb_conf="/etc/updatedb.conf"
@@ -80,12 +80,11 @@ readonly preinstall_pkgs=(
   whois
 )
 readonly pacstrap_pkgs=(
-  # Packages to install using pacstrap.
+  # Packages to install using pacstrap. Must not be readonly.
   # Omit CPU firmware since we will detect the CPU type and add it later.
   acpi
   acpi_call
   acpid
-  age
   alsa-firmware
   alsa-utils
   attr
@@ -98,6 +97,7 @@ readonly pacstrap_pkgs=(
   bluez-utils
   btop
   btrfs-progs
+  cmatrix
   cowsay
   cryptsetup
   cups
@@ -116,12 +116,10 @@ readonly pacstrap_pkgs=(
   flatpak
   fzf
   git
-  glances
   grub
   grub-btrfs
   htop
   inetutils
-  iperf3
   ipset
   linux
   linux-firmware
@@ -146,7 +144,6 @@ readonly pacstrap_pkgs=(
   reflector
   rsync
   sof-firmware
-  sops
   sudo
   terminus-font
   thin-provisioning-tools
@@ -181,7 +178,6 @@ readonly gui_pkgs=(
   # Packages to install for the GUI environment
   alacritty
   archlinux-wallpaper
-  btrfs-assistant
   calibre
   code
   gimp
@@ -192,7 +188,6 @@ readonly gui_pkgs=(
   libreoffice-fresh
   meld
   network-manager-applet
-  plymouth
   scribus
   strawberry
   ttf-0xproto-nerd
@@ -235,7 +230,6 @@ readonly services_to_enable=(
   acpid
 )
 readonly flatpak_apps=(
-  com.brave.Browser
   dev.bragefuglseth.Keypunch
   net.cozic.joplin_desktop
   org.deluge_torrent.deluge
@@ -253,7 +247,11 @@ readonly flatpak_apps=(
   dev.bragefuglseth.Fretboard
 )
 readonly aur_apps=(
+  brave-bin
+  btrfs-assistant
   oh-my-posh
+  plymouth
+  ttf-ms-fonts
 )
 #endregion - Variables
 # =============================================================================
@@ -301,11 +299,6 @@ log_error() {
    _log "ERROR" "$@"
    exit 1
 }
-log_failure() {
-  # Logs at ERROR severity without terminating the script.
-  # Use when the caller handles the failure via return codes.
-  _log "ERROR" "$@"
-}
 log_debug() {
     [[ "$VERBOSE" == "true" ]] || return 0
     _log "DEBUG" "$@"
@@ -350,8 +343,8 @@ configure_pacman_preinstallation() {
 
   log_info "Pacman pre-install configuration updated successfully."
   # Set-up the fastest Arch mirrors
-  reflector --age 6 --country US --latest 5 --protocol https --sort rate --verbose --save "${pacman_mirrorlist}"
-  LC_ALL=C pacman -Sy --noconfirm archlinux-keyring 2>&1 | grep -vE 'warning: archlinux-keyring-[^ ]+ is up to date -- reinstalling$'
+  reflector --age 6 --country us --latest 8 --number 5 --protocol https --sort rate --verbose --save "${pacman_mirrorlist}"
+  pacman --noconfirm -Sy archlinux-keyring
 }
 ask_install_de_native() {
   # Function: ask_install_de_native
@@ -861,6 +854,13 @@ create_physical_partitions() {
   local efi_part="$4"
   local root_part="$5"
 
+  log_info "In create_physical_partitions function"
+  log_info "disk = $1"
+  log_info "efi_size = $2"
+  log_info "root_size = $3"
+  log_info "efi_part = $4"
+  log_info "root_part = $5"
+  pause
   log_info "Creating physical partitions on $disk"
 
   sgdisk \
@@ -1108,7 +1108,7 @@ configure_time_and_locale() {
 
     timezone="$1"
     hostname="$2"
-    host_domain="$3"
+    hostdomain="$3"
 
     log_info "Configuring time and locale in chroot environment"
 
@@ -1340,7 +1340,7 @@ install_gpu_drivers() {
             ;;
         Intel)
             log_info "Installing Intel drivers..."
-            arch-chroot "$root_mount" pacman -S --noconfirm mesa intel-media-driver intel-ucode
+            arch-chroot "$root_mount" pacman -S --noconfirm mesa lib32-mesa intel-media-driver intel-ucode
             ;;
         *)
             log_warn "Unknown GPU detected. Manual intervention may be required."
@@ -1508,114 +1508,6 @@ CHEZMOI_EOF
   chmod +x "$script_path" || \
     log_error "Failed to make $script_path script executable"
 }
-configure_reflector_after_pacstrap() {
-  # =============================================================================
-  # configure_reflector_after_pacstrap
-  # -----------------------------------------------------------------------------
-  # Updates /etc/xdg/reflector/reflector.conf inside the chroot with
-  # standardized mirror selection parameters. Backs up the original file,
-  # rewrites commented/uncommented directives idempotently, verifies the
-  # result, and generates an initial mirrorlist.
-  #
-  # Arguments:
-  #   $1 - Path to the chroot mount point (e.g., /mnt)
-  #
-  # Returns:
-  #   0 - Success
-  #   1 - Prerequisites or file not found
-  #   2 - Modification or verification failure
-  # ============================================================================
-# Arguments: $1 - chroot mount point (e.g., /mnt)
-  # Returns: 0 success, 1 missing prerequisites, 2 edit/verification failure
-  local root_mount="${1:-/mnt}"
-  local conf="${root_mount}/etc/xdg/reflector/reflector.conf"
-
-  if [[ ! -f "$conf" ]]; then
-    log_failure "reflector.conf not found in chroot: ${conf}"
-    return 1
-  fi
-
-# Backup the original before clobbering it
-  local backup
-  backup="${conf}.bak.$(date +%Y%m%d%H%M%S)"
-  if ! cp -p "$conf" "$backup"; then
-    log_failure "Failed to create backup, aborting modification of ${conf}"
-    return 2
-  fi
-  log_debug "reflector.conf backup created: ${backup}"
-
-  # Write the canonical configuration file wholesale
-  cat > "$conf" <<'REFLECTOR_CONF'
---age 6
---country US
---latest 5
---protocol https
---save /etc/pacman.d/mirrorlist
---sort rate
-REFLECTOR_CONF
-
-  # Verify the four managed directives before generating the mirrorlist
-  local directive failed=0
-  for directive in "--country US" "--age 6" "--sort rate" "--latest 5"; do
-    if ! grep -qxF -e "$directive" "$conf"; then
-      log_failure "Post-condition failed: '${directive}' not present in ${conf}"
-      failed=1
-    fi
-  done
-
-  if (( failed )); then
-    log_failure "Verification failed; restoring original reflector.conf"
-    mv -f "$backup" "$conf"
-    return 2
-  fi
-
-  log_info "Reflector configured: US mirrors, latest 5, sorted by rate, max age 6h"
-  log_debug "Effective directives: $(grep -E '^--' "$conf" | tr '\n' ' ')"
-
-  cat > "${root_mount}/etc/systemd/system/reflector.timer.d/10-firstboot.conf" <<'TIMER'
-[Timer]
-OnBootSec=5min
-TIMER
-
-  return 0
-}
-configure_plasma_desktop() {
-  # =============================================================================
-  # configure_plasma_desktop
-  # -----------------------------------------------------------------------------
-  # Configures the Plasma desktop environment for the user.
-  #
-  # Arguments:
-  #   $1 - Path to the chroot mount point (e.g., /mnt)
-  #
-  # Returns:
-  #   0 - Success
-  #   1 - Prerequisites or file not found
-  #   2 - Modification or verification failure
-  # ============================================================================
-  root_mount="$1"
-  SESSION="plasma.desktop"   # plasma.desktop = Wayland session in newer Plasma; plasma-wayland.desktop on older distros
-  CONF_DIR="$root_mount/etc/sddm.conf.d"
-  CONF_FILE="${CONF_DIR}/50-default-session.conf"
-
-  # Guard: verify the session desktop file exists
-  if ! ls "$root_mount/usr/share/wayland-sessions/${SESSION}" >/dev/null 2>&1; then
-      log_error "ERROR: ${SESSION} not found in /usr/share/wayland-sessions/"
-  fi
-
-  mkdir -p "${CONF_DIR}"
-  sudo tee "${CONF_FILE}" >/dev/null <<EOF
-[Autologin]
-# Optional: uncomment for autologin
-#User=roger
-#Session=${SESSION}
-
-[General]
-Session=${SESSION}
-EOF
-
-  log_info "Default SDDM session set to ${SESSION} in ${CONF_FILE}"
-}
 # endregion - Function Definitions
 # =============================================================================
 # region - Main Script Execution
@@ -1648,6 +1540,9 @@ main() {
   configure_time_preinstallation "$my_timezone"
   configure_pacman_preinstallation "${pacman_conf}" "${pacman_parallel_downloads}" "${pacman_color_output}"
   install_preinstall_pkgs "${preinstall_pkgs[@]}"
+
+  # Get root size (now interactive)
+  #root_partition_size=$(get_root_partition_size "$my_disk")
 
   # install_gui_apps=$(ask_install_de_native)
   install_gui_apps=0
@@ -1711,6 +1606,8 @@ main() {
   # Prepare the disk for installation
   # create_physical_partitions "$my_disk" "$efi_partition_size" "$root_partition_size"
   # Create partitions with calculated size
+  log_info "Calling create_physical_partitions my_disk=$my_disk efi_partition_size=$efi_partition_size PARTITION_SIZE=$PARTITION_SIZE my_partition_efi=$my_partition_efi my_partition_root=$my_partition_root"
+  pause
   create_physical_partitions "$my_disk" "$efi_partition_size" "$PARTITION_SIZE" "$my_partition_efi" "$my_partition_root"
 
   create_physical_volumes "$my_partition_root"
@@ -1729,29 +1626,18 @@ main() {
 
   mount_partitions "$my_root_mount" "$my_partition_efi"
 
-  # Avoid Warnings about missing /etc/vconsole.conf during mkinitcpio
-  mkdir "$my_root_mount/etc" || \
-    log_error "Failed to create /mnt/etc"
-  echo "KEYMAP=${keyboard_layout}" > /mnt/etc/vconsole.conf || \
-    log_error "Failed to create /mnt/etc/vconsole.conf"
-
-  # Correct the new root home permissions to what the package manager expects
-  chmod 750 /mnt/root || \
-    log_error "Failed to set the permissions on /mnt/root"
-
   local -a all_pkgs=("${pacstrap_pkgs[@]}")
   [[ -n "$cpu_firmware" ]] && all_pkgs+=("$cpu_firmware")
   [[ -n "$hypervisor_pkgs" ]] && all_pkgs+=("$hypervisor_pkgs")
-
   pacstrap $my_root_mount "${all_pkgs[@]}" || \
     log_error "Failed to install base packages with pacstrap"
 
   genfstab -U $my_root_mount >> $my_root_mount/etc/fstab || \
     log_error "Failed to generate the File System TABle (fstab) using UUID numbers"
 
-  configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name_dyn" "$host_domain_dyn"
-
   install_gpu_drivers "$my_root_mount"
+
+  configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name_dyn" "$host_domain_dyn"
 
   # Enable color output for pacman and specify the number of parallel downloads
   arch-chroot $my_root_mount sed -i 's/#Color/Color/;s/ParallelDownloads = 5/ParallelDownloads = 7/' "/etc/pacman.conf"
@@ -1776,7 +1662,7 @@ main() {
 
   if [ "$install_gui_apps" -eq 0 ]; then
     # Install KDE Plasma and sddm
-    arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm plasma-meta kde-applications
+    arch-chroot $my_root_mount pacman -S --needed --noconfirm xorg sddm plasma kde-applications
 
     # Enable SDDM display manager
     arch-chroot $my_root_mount systemctl enable sddm
@@ -1784,9 +1670,6 @@ main() {
     # Apply the Breeze theme to sddm
     mkdir -p $my_root_mount/etc/sddm.conf.d/
     arch-chroot $my_root_mount sed 's/Current=/Current=breeze/;w /etc/sddm.conf.d/sddm.conf' /usr/lib/sddm/sddm.conf.d/default.conf
-
-    # Configure KDE Plasma
-    configure_plasma_desktop "$my_root_mount"
 
     # Install the gui packages
     arch-chroot $my_root_mount pacman -Sy --needed --noconfirm "${gui_pkgs[@]}"
@@ -1820,23 +1703,16 @@ main() {
 
   arch-chroot $my_root_mount chown --recursive $my_user_id:$my_user_id /home/$my_user_id/Scripts
 
-  # Add a symlink to use ncurses6 instead of ncurses5 for PassMark Performance Test for Linux compatibility
-  arch-chroot $my_root_mount ln -s /usr/lib/libtinfo.so.6 /usr/lib/libtinfo.so.5
-  arch-chroot $my_root_mount ln -s /usr/lib/libncursesw.so.6 /usr/lib/libncurses.so.5
-
   # Copy this script to the root home directory
   mkdir -p "${my_root_mount}/root/Scripts"
   cp install.sh $my_root_mount/root/Scripts
   chmod -x $my_root_mount/root/Scripts/install.sh
   cp "$LOG_FILE" $my_root_mount/root/
 
-  configure_reflector_after_pacstrap "$my_root_mount" || \
-    log_error "Failed to configure reflector in chroot"
-
+  # Use the current mirrorlist in the final install, after /etc
   cp "${pacman_mirrorlist}" "${my_root_mount}${pacman_mirrorlist}"
 
   echo -e "${success_color}Please set a password for the new root account:${no_color}"
-
   arch-chroot $my_root_mount passwd root
 
   sync
