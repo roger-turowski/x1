@@ -86,6 +86,7 @@ readonly pacstrap_pkgs=(
   acpi_call
   acpid
   alsa-firmware
+  alsa-ucm-conf
   alsa-utils
   attr
   avahi
@@ -231,6 +232,7 @@ readonly services_to_enable=(
   fstrim.timer
   firewalld
   acpid
+  wireplumber
 )
 readonly flatpak_apps=(
   com.brave.Browser
