@@ -1209,7 +1209,7 @@ enable_user_services() {
   log_info "Enabling user services in chroot environment"
 
   for service in "${services[@]}"; do
-    arch-chroot "$root_mount" systemctl enable "$service" || \
+    arch-chroot "$root_mount" systemctl --global enable "$service" || \
       log_error "Failed to enable user service: $service in chroot"
   done
 
