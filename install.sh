@@ -163,6 +163,10 @@ readonly pacstrap_pkgs=(
   zellij
   zsh
   zsh-completions
+  pipewire
+  pipewire-pulse
+  pipewire-alsa
+  wireplumber
 )
 readonly podman_pkgs=(
   # Podman related packages
@@ -1530,6 +1534,12 @@ CHEZMOI_EOF
 
   chmod +x "$script_path" || \
     log_error "Failed to make $script_path script executable"
+}
+configure_audio() {
+  local root_mount="$1"
+  log_info "Configuring audio"
+  # Option 1: Run as a dedicated user with lingering enabled
+  arch-chroot "${root_mount}" loginctl enable-linger audiouser
 }
 # endregion - Function Definitions
 # =============================================================================
