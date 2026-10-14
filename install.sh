@@ -236,7 +236,11 @@ readonly services_to_enable=(
   fstrim.timer
   firewalld
   acpid
-  wireplumber
+)
+readonly user_services_to_enable=(
+  wireplumber.service
+  pipewire.socket
+  pipewire-pulse.socket
 )
 readonly flatpak_apps=(
   com.brave.Browser
@@ -1196,6 +1200,22 @@ enable_services() {
 
   log_info "All specified services enabled successfully"
 }
+
+enable_user_services() {
+  local root_mount="$1"
+  shift
+  local services=("$@")
+
+  log_info "Enabling user services in chroot environment"
+
+  for service in "${services[@]}"; do
+    arch-chroot "$root_mount" systemctl enable "$service" || \
+      log_error "Failed to enable user service: $service in chroot"
+  done
+
+  log_info "All specified user services enabled successfully"
+}
+
 configure_nic_fixes() {
   # Disable Energy-Efficient Ethernet globally at driver bind time.
   # Interface name agnostic: $name is resolved by udev per event.
@@ -1682,6 +1702,8 @@ main() {
   install_and_configure_grub "$my_root_mount"
 
   enable_services "$my_root_mount" "${services_to_enable[@]}"
+
+  enable_user_services "$my_root_mount" "${user_services_to_enable[@]}"
 
   sudo_enable_wheel_group "$my_root_mount"
 
