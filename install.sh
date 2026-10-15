@@ -75,10 +75,12 @@ readonly pacman_color_output=true
 # readonly snapper_conf="/etc/snapper/configs/root"
 # readonly updatedb_conf="/etc/updatedb.conf"
 # Packages to install
+
 readonly preinstall_pkgs=(
   # Packages to install before the main installation
   whois
 )
+
 readonly pacstrap_pkgs=(
   # Packages to install using pacstrap. Must not be readonly.
   # Omit CPU firmware since we will detect the CPU type and add it later.
@@ -168,6 +170,7 @@ readonly pacstrap_pkgs=(
   pipewire-alsa
   wireplumber
 )
+
 readonly podman_pkgs=(
   # Podman related packages
   podman
@@ -180,6 +183,7 @@ readonly podman_pkgs=(
   distrobox # Works with Podman
   python-pip # Works with Distrobox
 )
+
 readonly gui_pkgs=(
   # Packages to install for the GUI environment
   alacritty
@@ -224,6 +228,7 @@ readonly gui_pkgs=(
   xdg-desktop-portal-gtk  # Used for Sway
   xdg-desktop-portal-wlr  # Used for Sway
 )
+
 readonly services_to_enable=(
   # Services to enable after installation
   NetworkManager
@@ -237,11 +242,13 @@ readonly services_to_enable=(
   firewalld
   acpid
 )
+
 readonly user_services_to_enable=(
   wireplumber.service
   pipewire.socket
   pipewire-pulse.socket
 )
+
 readonly flatpak_apps=(
   com.brave.Browser
   dev.bragefuglseth.Keypunch
@@ -260,19 +267,23 @@ readonly flatpak_apps=(
   io.github.nokse22.inspector
   dev.bragefuglseth.Fretboard
 )
+
 readonly aur_apps=(
  oh-my-posh
 )
+
 #endregion - Variables
 # =============================================================================
 # region - Function Definitions
 # =============================================================================
+
 check_for_root() {
   # Ensure the script is being run by root
   if [[ "$UID" -ne 0 ]]; then
     log_error  "This script must be run as root!"
   fi
 }
+
 _log() {
   # =============================================================================
   # _log
@@ -299,20 +310,25 @@ _log() {
       echo "$line" >> "$LOG_FILE"
   fi
 }
+
 log_info()  {
   _log "INFO"  "$@";
 }
+
 log_warn()  {
   _log "WARN"  "$@";
 }
+
 log_error() {
    _log "ERROR" "$@"
    exit 1
 }
+
 log_debug() {
     [[ "$VERBOSE" == "true" ]] || return 0
     _log "DEBUG" "$@"
 }
+
 configure_pacman_preinstallation() {
   # =============================================================================
   # configure_pacman_preinstallation
@@ -356,6 +372,7 @@ configure_pacman_preinstallation() {
   reflector --age 6 --country us --latest 8 --number 5 --protocol https --sort rate --verbose --save "${pacman_mirrorlist}"
   pacman --noconfirm -Sy archlinux-keyring
 }
+
 ask_install_de_native() {
   # Function: ask_install_de_native
   #
@@ -390,6 +407,7 @@ ask_install_de_native() {
     esac
   done
 }
+
 ask_install_podman_pkgs() {
   # Function: ask_install_podman_pkgs
   #
@@ -423,6 +441,7 @@ ask_install_podman_pkgs() {
     esac
   done
 }
+
 teardown_existing_mappings() {
   # Function: teardown_existing_mappings
   #
@@ -459,34 +478,34 @@ teardown_existing_mappings() {
   # 1. Remove LVM volume groups on this disk
   local vg
   for vg in $(vgs --noheadings --separator ' ' 2>/dev/null | awk '{print $1}'); do
-      if pvs --noheadings 2>/dev/null | grep -q "$disk"; then
-          log_info "Removing volume group: ${vg}"
-          lvremove -ff "$vg" 2>/dev/null || true
-          vgremove -ff "$vg" 2>/dev/null || true
-      fi
+    if pvs --noheadings 2>/dev/null | grep -q "$disk"; then
+      log_info "Removing volume group: ${vg}"
+      lvremove -ff "$vg" 2>/dev/null || true
+      vgremove -ff "$vg" 2>/dev/null || true
+    fi
   done
 
   # 1b. Remove physical volumes on this disk
   local pv
   for pv in $(pvs --noheadings -o pv_name 2>/dev/null | tr -d ' '); do
-      if [[ "$pv" == "$disk"* ]]; then
-          log_info "Removing physical volume: ${pv}"
-          pvremove -ff "$pv" 2>/dev/null || true
-      fi
+    if [[ "$pv" == "$disk"* ]]; then
+      log_info "Removing physical volume: ${pv}"
+      pvremove -ff "$pv" 2>/dev/null || true
+    fi
   done
 
   # 2. Close LUKS containers on this disk
   local luks_dev
   for luks_dev in $(lsblk -ln -o NAME,TYPE "$disk" 2>/dev/null | awk '$2 == "crypt" {print $1}'); do
-      log_info "Closing LUKS container: ${luks_dev}"
-      cryptsetup close "$luks_dev" || return 1
+    log_info "Closing LUKS container: ${luks_dev}"
+    cryptsetup close "$luks_dev" || return 1
   done
 
   # 3. Unmount anything still hanging on
   local mountpoint
   for mountpoint in $(lsblk -ln -o MOUNTPOINT "$disk" 2>/dev/null | grep -v '^$'); do
-      log_info "Unmounting ${mountpoint}"
-      umount -Rf "$mountpoint" 2>/dev/null || true
+    log_info "Unmounting ${mountpoint}"
+    umount -Rf "$mountpoint" 2>/dev/null || true
   done
 
   # 4. Clean up any remaining device-mapper nodes
@@ -494,6 +513,7 @@ teardown_existing_mappings() {
 
   log_info "Mapping teardown complete for ${disk}"
 }
+
 wipe_disk_signatures() {
   # Function: wipe_disk_signatures
   #
