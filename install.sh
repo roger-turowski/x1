@@ -1710,6 +1710,9 @@ main() {
   genfstab -U $my_root_mount >> $my_root_mount/etc/fstab || \
     log_error "Failed to generate the File System TABle (fstab) using UUID numbers"
 
+  sed -i '\~[[:blank:]]/home[[:blank:]]~ s~relatime~noatime~; \~[[:blank:]]/data[[:blank:]]~ s~relatime~noatime~' $my_root_mount/etc/fstab || \
+    log_error "Failed to update fstab with xfs noatime parameters"
+
   install_gpu_drivers "$my_root_mount"
 
   configure_time_and_locale "$my_root_mount" "$my_timezone" "$my_host_name_dyn" "$host_domain_dyn"
